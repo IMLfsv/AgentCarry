@@ -262,7 +262,8 @@ def records(path, limit=None):
 
 
 class BundleBuilder:
-    def __init__(self, stage, project, home, asset_roots):
+    def __init__(self, stage, project, home, asset_roots, progress=lambda _: None):
+        self.progress = progress
         self.stage, self.project, self.home = stage, project, home
         self.asset_roots = [project, *asset_roots]
         self.entries, self.excluded, self.warnings = {}, [], []
@@ -279,6 +280,7 @@ class BundleBuilder:
         dest.parent.mkdir(parents=True, exist_ok=True)
         digest = hashlib.sha256()
         copied = 0
+        self.progress({'stage': '复制文件', 'detail': str(source), 'completed': 0, 'total': byte_limit or before[2], 'unit': '字节'})
         with source.open('rb') as reader, dest.open('xb') as writer:
             while byte_limit is None or copied < byte_limit:
                 block = reader.read(CHUNK if byte_limit is None else min(CHUNK, byte_limit - copied))
@@ -287,6 +289,7 @@ class BundleBuilder:
                 digest.update(block)
                 writer.write(block)
                 copied += len(block)
+                self.progress({'stage': '复制文件', 'detail': str(source), 'completed': copied, 'total': byte_limit or before[2], 'unit': '字节'})
         if byte_limit is not None and copied != byte_limit:
             raise PorterError('History prefix was truncated while copying')
         if signature(source) != before:
@@ -384,6 +387,7 @@ class BundleBuilder:
         target = self.stage / name
         target.parent.mkdir(parents=True, exist_ok=True)
         copied = 0
+        self.progress({'stage': '解压聊天', 'detail': source.name})
         with target.open('xb') as writer:
             for block in zstd_blocks(source):
                 # Offsets refer to decoded JSONL, never compressed bytes.
@@ -391,6 +395,7 @@ class BundleBuilder:
                     block = block[:max(0, limit - copied)]
                 writer.write(block)
                 copied += len(block)
+                self.progress({'stage': '解压聊天', 'detail': source.name + f' · 已解压 {copied:,} 字节'})
         if limit is not None and copied != limit:
             raise PorterError('History prefix extends beyond its source')
         if signature(source) != before:
@@ -535,7 +540,7 @@ def visible_text(content):
     return '\n'.join(part['text'] for part in content if isinstance(part, dict) and isinstance(part.get('text'), str))
 
 
-def export_bundle(home, project, output, ids=None, asset_roots=(), allow_empty=False):
+def export_bundle(home, project, output, ids=None, asset_roots=(), allow_empty=False, progress=lambda _: None):
     home, project, output = Path(home).resolve(), Path(project).resolve(), Path(output).resolve()
     if not project.is_dir():
         raise PorterError('Project directory does not exist')
@@ -552,10 +557,15 @@ def export_bundle(home, project, output, ids=None, asset_roots=(), allow_empty=F
     with tempfile.TemporaryDirectory(prefix='porter-', dir=extended(str(output.parent), force=True)) as scratch:
         stage = Path(scratch) / 'stage'
         stage.mkdir()
-        builder = BundleBuilder(stage, project, home, roots)
+        builder = BundleBuilder(stage, project, home, roots, progress)
+        progress({'stage': '扫描项目文件', 'detail': str(project)})
         original_inventory = inventory(project)
         builder.project_files()
-        projected = [builder.project_thread(row, i) for i, row in enumerate(threads, 1)]
+        projected = []
+        for i, row in enumerate(threads, 1):
+            progress({'stage': '导出会话', 'detail': row['title'], 'completed': i - 1, 'total': len(threads), 'unit': '条'})
+            projected.append(builder.project_thread(row, i))
+            progress({'stage': '导出会话', 'detail': row['title'], 'completed': i, 'total': len(threads), 'unit': '条'})
         builder.add_text(dumps(builder.assets), 'history/asset-map.json', 'metadata')
         builder.add_text(dumps({'source_project': str(project), 'restored_project': 'project/'}), 'history/path-map.json', 'metadata')
         builder.add_text('Read project files as the current source of truth. Historical chats are evidence, '
@@ -574,8 +584,10 @@ def export_bundle(home, project, output, ids=None, asset_roots=(), allow_empty=F
         (stage / 'manifest.json').write_text(dumps(manifest), encoding='utf-8')
         zip_path = Path(scratch) / 'bundle.zip'
         with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-            for name in sorted(builder.entries):
+            for i, name in enumerate(sorted(builder.entries), 1):
+                progress({'stage': '打包项目', 'detail': name, 'completed': i - 1, 'total': len(builder.entries), 'unit': '项'})
                 z.write(stage / name, name)
+                progress({'stage': '打包项目', 'detail': name, 'completed': i, 'total': len(builder.entries), 'unit': '项'})
             z.write(stage / 'manifest.json', 'manifest.json')
         # Catch continued editing while the other files were copied/compressed.
         for source, before in builder.sources.items():
@@ -583,6 +595,7 @@ def export_bundle(home, project, output, ids=None, asset_roots=(), allow_empty=F
                 raise PorterError('Source changed during export; close active work and retry: ' + str(source))
         if inventory(project) != original_inventory:
             raise PorterError('Project inventory changed during export; close active work and retry')
+        progress({'stage': '校验导出包', 'detail': project.name})
         verify_bundle(zip_path)
         try:
             os.link(zip_path, output)  # Atomic, exclusive publication on the same volume.

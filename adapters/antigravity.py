@@ -235,13 +235,13 @@ def validate_plan(run, plan):
     return layout
 
 
-def apply(run, plan):
+def apply(run, plan, progress=lambda _: None):
     if not plan.get('can_apply'):
         raise porter.PorterError('Plan has blockers; inspect report.json before preparing a corrected plan')
     layout = validate_plan(run, plan)
     for key in ('conversations', 'projects'):
         layout[key].mkdir(parents=True, exist_ok=True)
-    return files.apply_entries(plan['entries'], run / 'journal.json', lambda: guard(plan['target_config']))
+    return files.apply_entries(plan['entries'], run / 'journal.json', lambda: guard(plan['target_config']), progress=progress)
 
 
 def recover(run, plan):

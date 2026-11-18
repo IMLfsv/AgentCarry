@@ -21,7 +21,7 @@ PLAN_FORMAT = 'agent-project-porter/plan/1'
 
 
 def make_plan(job_path, destination, run, target='portable', config=None,
-              allow_lossy=False, activate_context=False, max_total=porter.MAX_TOTAL):
+              allow_lossy=False, activate_context=False, max_total=porter.MAX_TOTAL, progress=lambda _: None):
     if target not in TARGETS:
         raise porter.PorterError('Unknown target adapter')
     destination, run = destination.absolute(), run.absolute()
@@ -29,7 +29,7 @@ def make_plan(job_path, destination, run, target='portable', config=None,
         files.no_links(path)
     if run.exists() or porter.inside(run, destination) or porter.inside(destination, run):
         raise porter.PorterError('Plan directory must be new and separate from restored workspaces')
-    parts = transfer.load_job(job_path, max_total)
+    parts = transfer.load_job(job_path, max_total, progress)
     native = TARGETS[target]
     if native:
         if not config:
@@ -96,7 +96,8 @@ def make_plan(job_path, destination, run, target='portable', config=None,
         project['source_exclusions'] = part['manifest'].get('excluded', [])
         project['source_warnings'] = part['manifest'].get('warnings', [])
         project['source_scope_notes'] = part.get('scope_notes', [])
-        for thread in part['manifest']['threads']:
+        for ti, thread in enumerate(part['manifest']['threads'], 1):
+            progress({'stage': '检查会话转换', 'detail': thread['title'], 'project': part['name'], 'completed': ti - 1, 'total': len(part['manifest']['threads']), 'unit': '条'})
             messages, issues = transfer.preview_messages(part['path'], thread)
             chat = {'source_id': thread['id'], 'title': thread['title'],
                     'target_id': str(uuid.uuid4()), 'trajectory_id': str(uuid.uuid4()),
@@ -121,7 +122,8 @@ def make_plan(job_path, destination, run, target='portable', config=None,
                      {'code': 'native_message_times_regenerated', 'original_times_preserved_in_archive': True},
                      {'code': 'runtime_validation_scope', 'value': 'one text conversation on Windows 2.32.2; batch format tests separate'}]
     if not blockers:
-        for part, project in zip(parts, projects):
+        for index, (part, project) in enumerate(zip(parts, projects), 1):
+            progress({'stage': '恢复项目文件', 'detail': part['name'], 'completed': index - 1, 'total': len(projects), 'unit': '个项目'})
             if not project['reused']:
                 project['restore'] = transfer.restore_project(part, Path(project['workspace']).parent, activate_context)
     plan = {'format': PLAN_FORMAT, 'created_at': porter.now(), 'target': target,
@@ -129,6 +131,7 @@ def make_plan(job_path, destination, run, target='portable', config=None,
             'warnings': warnings, 'can_apply': not blockers, 'allow_lossy': allow_lossy,
             'entries': [], 'privacy': 'PRIVATE: includes conversations and local paths'}
     if native and not blockers:
+        progress({'stage': '生成原生会话与备份', 'detail': '仅准备导入数据，尚未写入目标客户端'})
         plan['entries'] = native.stage(run, config, projects, ledger)
     elif not native and not blockers:
         for project in projects:

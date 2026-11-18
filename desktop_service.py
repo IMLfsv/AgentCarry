@@ -11,7 +11,7 @@ import publication
 import transfer
 from adapters import antigravity
 
-VERSION = '0.4.4-experimental'
+VERSION = '0.4.5-experimental'
 
 
 def defaults(home=None, env=None):
@@ -89,13 +89,13 @@ def prepare(output, target, config=None, selection=None, existing_job=None,
     if selection:
         publication.save_json(run / 'selection.json', selection)
         progress('正在打包所选项目和会话…')
-        transfer.export_job(run / 'selection.json', run / 'private-job')
+        transfer.export_job(run / 'selection.json', run / 'private-job', progress)
         job = run / 'private-job/job.json'
     else:
         job = Path(existing_job).absolute()
     progress('正在校验迁移内容并准备恢复…')
     result = migrate.make_plan(job, output / 'workspaces', run / 'plan', target, config,
-                               allow_lossy, activate_context)
+                               allow_lossy, activate_context, progress=progress)
     result['job'] = str(job)
     result['session'] = str(run)
     result['summary'] = summary(Path(result['plan']))
@@ -108,11 +108,12 @@ def prepare(output, target, config=None, selection=None, existing_job=None,
     return result
 
 
-def apply(plan_path):
+def apply(plan_path, progress=lambda _: None):
+    progress({'stage': '检查导入环境与备份', 'detail': '确认目标客户端已退出，验证暂存文件与备份'})
     run, plan = migrate.load_plan(Path(plan_path))
     if plan['target'] != antigravity.ADAPTER:
         raise porter.PorterError('可移植模式已经恢复文件，无需原生导入。')
-    result = antigravity.apply(run, plan)
+    result = antigravity.apply(run, plan, progress)
     verification = migrate.verify_plan(Path(plan_path))
     if verification['publication_snapshot_matches'] is False:
         raise porter.PorterError('导入后的文件核验失败，请查看 journal.json。')

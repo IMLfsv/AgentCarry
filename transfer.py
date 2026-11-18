@@ -29,7 +29,7 @@ def local_path(base, value):
     return path.resolve()
 
 
-def export_job(spec_path, out):
+def export_job(spec_path, out, progress=lambda _: None):
     """A spec selects physical roots, optional thread subsets, and context files."""
     spec_path, out = spec_path.resolve(), out.absolute()
     no_links(out)
@@ -55,7 +55,7 @@ def export_job(spec_path, out):
         # Each selected physical root is copied exactly once. A logical project
         # may span worktrees; association alone must not import files outside it.
         if ids is None:
-            ids = [r['id'] for r in all_rows if porter.inside(Path(r['cwd']).resolve(), root)]
+            ids = [r['id'] for r in all_rows if porter.inside(Path(r['cwd']).resolve(), root) and r['task_kind'] == 'conversation']
         threads = porter.selection(home, root, ids)
         registered_ids = {r['id'] for r in registrations if Path(r['path']).resolve() == root}
         scope = [{'code': 'associated_thread_outside_this_root', 'thread_id': r['id'], 'cwd': r['cwd']}
@@ -85,9 +85,11 @@ def export_job(spec_path, out):
     parts = []
     for index, (item, root, contexts, ids, scope) in enumerate(selected, 1):
         name = f'project-{index:04d}.zip'
+        def project_progress(event):
+            progress({**event, 'project': item.get('name') or root.name, 'project_index': index, 'project_total': len(selected)})
         porter.export_bundle(home, root, out / name, ids,
                              [local_path(spec_path.parent, p) for p in item.get('asset_roots', [])],
-                             allow_empty=True)
+                             allow_empty=True, progress=project_progress)
         attached = []
         for ci, (path, data) in enumerate(contexts, 1):
             rel = f'context/{index:04d}-{ci:04d}.md'
@@ -104,7 +106,7 @@ def export_job(spec_path, out):
     return {'job': str(out / 'job.json'), 'projects': len(parts), 'conversations': len(seen_threads)}
 
 
-def load_job(job_path, max_total=porter.MAX_TOTAL):
+def load_job(job_path, max_total=porter.MAX_TOTAL, progress=lambda _: None):
     job_path = job_path.resolve()
     base = job_path.parent
     if (base / '.porter-incomplete').exists():
@@ -113,7 +115,8 @@ def load_job(job_path, max_total=porter.MAX_TOTAL):
     if job.get('format') != JOB_FORMAT or not isinstance(job.get('projects'), list) or not job['projects']:
         raise porter.PorterError('Unsupported or empty job')
     loaded, used, total, seen_threads, seen_projects = [], set(), 0, set(), set()
-    for part in job['projects']:
+    for index, part in enumerate(job['projects'], 1):
+        progress({'stage': '校验迁移包', 'detail': part.get('name', ''), 'completed': index - 1, 'total': len(job['projects']), 'unit': '个项目'})
         name = porter.safe_name(part['bundle'])
         path = local_path(base, name)
         if not porter.inside(path, base) or name.casefold() in used or digest(path) != part['sha256']:

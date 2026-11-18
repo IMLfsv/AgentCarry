@@ -87,7 +87,7 @@ def rollback(entries, guard):
             publish(target, Path(entry['backup']).read_bytes(), entry['after'], guard)
 
 
-def apply_entries(entries, journal, guard, check_after=None):
+def apply_entries(entries, journal, guard, check_after=None, progress=lambda _: None):
     """Small testable publisher; never accepts unverified backup/content hashes."""
     if journal.exists():
         raise porter.PorterError('Publication journal already exists')
@@ -106,11 +106,14 @@ def apply_entries(entries, journal, guard, check_after=None):
     try:
         state['status'] = 'applying'
         save_json(journal, state)
-        for entry in entries:
+        for index, entry in enumerate(entries, 1):
+            progress({'stage': '写入目标客户端', 'detail': Path(entry['target']).name, 'completed': index - 1, 'total': len(entries), 'unit': '个文件'})
             publish(Path(entry['target']), Path(entry['source']).read_bytes(), entry['before'], guard)
             applied.append(entry)
             state['published_count'] = len(applied)
             save_json(journal, state)
+            progress({'stage': '写入目标客户端', 'detail': Path(entry['target']).name, 'completed': index, 'total': len(entries), 'unit': '个文件'})
+        progress({'stage': '核验写入结果', 'detail': '检查目标文件校验值'})
         guard()
         if any(digest(Path(e['target'])) != e['after'] for e in entries):
             raise porter.PorterError('Post-install file hash mismatch')
@@ -122,6 +125,7 @@ def apply_entries(entries, journal, guard, check_after=None):
     except BaseException as exc:
         state['error'] = str(exc)
         try:
+            progress({'stage': '导入异常，正在恢复', 'detail': '恢复本次已写入的文件'})
             rollback(applied, guard)
             state['status'] = 'rolled-back'
         except BaseException as recovery_error:

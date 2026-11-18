@@ -28,6 +28,22 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.config = antigravity.initialize_sandbox(self.root / 'target')
         self.output = self.root / 'output'
 
+    def test_progress_reports_real_work_counts_and_native_writes(self):
+        events = []
+        result = service.prepare(self.output, antigravity.ADAPTER, self.config,
+                                 selection=self.spec, progress=events.append)
+        stages = {e['stage'] for e in events if isinstance(e, dict)}
+        self.assertTrue({'复制文件', '导出会话', '打包项目', '检查会话转换', '恢复项目文件'} <= stages)
+        chats = [e for e in events if isinstance(e, dict) and e['stage'] == '导出会话']
+        self.assertEqual(sum(e['completed'] == e['total'] for e in chats), 2)
+        events.clear()
+        service.apply(Path(result['plan']), events.append)
+        writes = [e for e in events if e['stage'] == '写入目标客户端']
+        self.assertEqual(writes[0]['completed'], 0)
+        self.assertEqual(writes[-1]['completed'], writes[-1]['total'])
+        self.assertTrue(all(0 <= e['completed'] <= e['total'] for e in writes))
+        self.assertEqual(events[-1]['stage'], '核验写入结果')
+
     def test_sidebar_names_and_internal_task_filters(self):
         ids = [t for p in self.spec['projects'] for t in p['threads']]
         with closing(sqlite3.connect(Path(self.spec['codex_home']) / 'state_7.sqlite')) as con:

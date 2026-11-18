@@ -4,7 +4,7 @@
 
 Your projects. Your conversations. Your next AI.
 
-[下载 Windows 测试版](https://github.com/IMLfsv/AgentCarry/releases/tag/v0.4.4-experimental) · [快速开始](QUICKSTART.txt) · [已知限制与验证范围](VALIDATION.txt)
+[下载 Windows 测试版](https://github.com/IMLfsv/AgentCarry/releases/tag/v0.4.5-experimental) · [快速开始](QUICKSTART.txt) · [已知限制与验证范围](VALIDATION.txt)
 
 把所选 **Codex 项目文件、对话、可识别附件和显式选择的规则/记忆文件** 一起迁移。Python 3.11+，依赖 zstandard（下载版已内置），迁移时无网络请求、无 API Key。
 

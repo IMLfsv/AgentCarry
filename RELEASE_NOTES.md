@@ -2,7 +2,7 @@
 
 Your projects. Your conversations. Your next AI.
 
-这是 Windows x64 下载测试版。下载 `AgentCarry-0.4.4-experimental-windows-x64.zip`，解压整个文件夹，双击 `AgentCarry.exe`。无需安装 Python。
+这是 Windows x64 下载测试版。下载 `AgentCarry-0.4.5-experimental-windows-x64.zip`，解压整个文件夹，双击 `AgentCarry.exe`。无需安装 Python。
 
 ## 可以做什么
 
@@ -34,3 +34,5 @@ Your projects. Your conversations. Your next AI.
 0.4.3 修复：支持 Codex .jsonl.zst 压缩聊天，索引保留旧 .jsonl 路径时自动识别压缩副本；解压到迁移包，不改动源文件。分支历史按解压后的字节偏移截取，仅收录所需父会话前缀；损坏、截断压缩流停止导出。
 
 0.4.4 修复：优先使用 Codex name（侧栏命名），保留原始 title；依据 source/thread_source 区分普通对话、Guardian 审查、子代理和自动任务。默认隐藏内部任务及归档对话，可通过独立筛选显示并明确标注。普通对话按最近活动排序，CLI 未指定 ID 时也排除内部任务，显式 ID 仍可导出。
+
+0.4.5 更新：常驻进度区显示当前阶段、项目/会话/文件、当前步骤实际完成数量和耗时；未知总量阶段使用活动指示，不估算整体百分比。固定底部操作按钮，选择页可滚动，避免高缩放下看不到下一步。

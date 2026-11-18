@@ -3,6 +3,7 @@ from filesystem import Path, extended
 import os
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
@@ -19,6 +20,8 @@ class Window:
     def __init__(self, root):
         self.root, self.busy = root, False
         self.events, self.controls = queue.Queue(), []
+        self.progress_events = queue.Queue(maxsize=1)
+        self.started_at = None
         self.projects, self.nodes, self.selected_roots, self.selected_threads = [], {}, set(), set()
         self.contexts, self.job_path, self.current_plan, self.last_session = [], None, None, None
         root.title('AgentCarry · 项目与对话迁移')
@@ -56,10 +59,16 @@ class Window:
         self._target_page()
         self._review_page()
         footer = ttk.Frame(frame)
-        footer.pack(fill='x', pady=(12, 0))
-        ttk.Label(footer, textvariable=self.status, wraplength=710).pack(side='left', fill='x', expand=True)
+        footer.pack(side='bottom', fill='x', pady=(10, 0), before=self.tabs)
+        self.progress_note = tk.StringVar(root, value='等待操作')
+        self.elapsed = tk.StringVar(root, value='')
+        ttk.Label(footer, textvariable=self.progress_note, wraplength=850).pack(anchor='w')
+        ttk.Label(footer, textvariable=self.elapsed, style='Sub.TLabel').pack(anchor='w')
+        self.status_label = ttk.Label(footer, textvariable=self.status, wraplength=550)
+        self.status_label.pack(side='left', fill='x', expand=True)
         self.progress = ttk.Progressbar(footer, mode='indeterminate', length=150)
-        self.progress.pack(side='right')
+        self.progress.pack(side='right', padx=(10, 0), before=self.status_label)
+        footer.bind('<Configure>', lambda e: self.status_label.configure(wraplength=max(200, e.width - 190)))
         for var in [*self.vars.values(), self.mode, self.lossy, self.activate]:
             var.trace_add('write', lambda *_: self.invalidate())
         self.root.after(100, self.poll)
@@ -85,7 +94,25 @@ class Window:
         self.controls.append(box)
 
     def _source_page(self):
-        page = self.pages[0]
+        outer = self.pages[0]
+        bottom = ttk.Frame(outer)
+        bottom.pack(side='bottom', fill='x')
+        ttk.Label(bottom, textvariable=self.context_note, wraplength=700).pack(anchor='w', pady=(5, 4))
+        row = ttk.Frame(bottom)
+        row.pack(fill='x')
+        self.button(row, '添加记忆/规则文件…', self.pick_context).pack(side='left')
+        self.button(row, '清除额外文件', self.clear_context).pack(side='left', padx=6)
+        self.next_button = self.button(row, '下一步 →', lambda: self.tabs.select(1))
+        self.next_button.pack(side='right')
+        canvas = tk.Canvas(outer, highlightthickness=0)
+        scroll_page = ttk.Scrollbar(outer, orient='vertical', command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll_page.set)
+        scroll_page.pack(side='right', fill='y')
+        canvas.pack(fill='both', expand=True)
+        page = ttk.Frame(canvas)
+        window = canvas.create_window(0, 0, window=page, anchor='nw')
+        page.bind('<Configure>', lambda _: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>', lambda e: canvas.itemconfigure(window, width=e.width))
         self.field(page, 'Codex 数据目录', self.vars['codex_home'])
         actions = ttk.Frame(page)
         actions.pack(fill='x', pady=8)
@@ -120,12 +147,6 @@ class Window:
         scroll.pack(side='right', fill='y')
         self.tree.bind('<ButtonRelease-1>', self.toggle)
         self.tree.bind('<space>', self.toggle)
-        ttk.Label(page, textvariable=self.context_note, wraplength=850).pack(anchor='w', pady=(12, 4))
-        row = ttk.Frame(page)
-        row.pack(fill='x')
-        self.button(row, '添加记忆/规则文件…', self.pick_context).pack(side='left')
-        self.button(row, '清除额外文件', self.clear_context).pack(side='left', padx=6)
-        self.button(row, '下一步 →', lambda: self.tabs.select(1)).pack(side='right')
 
     def _target_page(self):
         outer = self.pages[1]
@@ -158,8 +179,8 @@ class Window:
         self.check(page, '将我选择的额外记忆/规则激活到各恢复项目', self.activate)
         ttk.Label(page, text='原始标题会存档，但客户端可能显示首条消息。原生工具记录与媒体重建尚未支持。',
                   wraplength=820, style='Sub.TLabel').pack(anchor='w', pady=(5, 10))
-        row = ttk.Frame(page)
-        row.pack(fill='x', pady=10)
+        row = ttk.Frame(outer)
+        row.pack(side='bottom', fill='x', pady=10, before=canvas)
         self.button(row, '← 返回选择', lambda: self.tabs.select(0)).pack(side='left')
         self.button(row, '整理数据库…', self.checkpoint).pack(side='left', padx=8)
         self.button(row, '准备并检查迁移 →', self.prepare).pack(side='right')
@@ -174,7 +195,7 @@ class Window:
         self.report.pack(fill='both', expand=True)
         self.show_report('准备完成后，这里会显示项目、会话、恢复位置和转换差异。\n\n原生导入只会在你点击“执行导入”后写入目标 App。')
         row = ttk.Frame(page)
-        row.pack(fill='x', pady=(12, 0))
+        row.pack(side='bottom', fill='x', pady=(12, 0), before=self.report)
         self.button(row, '查看输出目录', self.open_output).pack(side='left')
         self.button(row, '恢复一次导入…', self.recover).pack(side='left', padx=8)
         self.apply_button = self.button(row, '执行导入', self.apply)
@@ -212,6 +233,7 @@ class Window:
             missing = sum(not t.get('available', True) for p in projects for t in p['threads'])
             self.source_note.set(f'聊天文件缺失 {missing} 条，已标记且不可勾选；全选仅选择可用会话。当前筛选显示 {len(projects)} 个项目、{sum(len(p["threads"]) for p in projects)} 条会话。请勾选要迁移的内容。')
         self.start(lambda: service.source_projects(home, include_internal, include_archived), done)
+        self.show_progress({'stage': '读取项目与会话索引', 'detail': '检查会话类型及普通/压缩记录路径，不读取聊天正文'})
 
     def draw_projects(self):
         opened = {self.nodes[n][1]['path']: bool(self.tree.item(n, 'open'))
@@ -314,7 +336,7 @@ class Window:
                 self.tree.insert('', 'end', text=part['name'], values=(f'{len(part["manifest"]["threads"])} 条会话',))
             self.source_note.set('已打开迁移包，将迁入包内所选内容：' + path)
             self.tabs.select(1)
-        self.start(lambda: transfer.load_job(Path(path)), done)
+        self.start(lambda: transfer.load_job(Path(path), progress=self.report_progress), done)
 
     def pick_context(self):
         if self.busy or self.job_path:
@@ -342,7 +364,7 @@ class Window:
                                         self.selected_roots, self.selected_threads, self.contexts)
             kwargs = dict(output=self.vars['output'].get(), target=MODES[self.mode.get()], config=self.target_config(),
                           selection=selection, existing_job=self.job_path, allow_lossy=self.lossy.get(),
-                          activate_context=self.activate.get(), progress=lambda s: self.events.put(('progress', s)))
+                          activate_context=self.activate.get(), progress=self.report_progress)
         except Exception as exc:
             self.error(exc)
             return
@@ -367,7 +389,8 @@ class Window:
             self.invalidate()
             self.show_report(self.report.get('1.0', 'end') + '\n导入完成，文件核验通过。现在可启动 Antigravity 检查续聊和项目文件；检查后重启再确认。\n')
             self.status.set('导入完成；客户端续聊和重启检查尚待你验证。')
-        self.start(lambda: service.apply(Path(plan)), done)
+            self.progress_note.set('导入与文件核验完成。请打开 Antigravity 检查。')
+        self.start(lambda: service.apply(Path(plan), self.report_progress), done)
 
     def recover(self):
         if self.busy:
@@ -396,11 +419,42 @@ class Window:
         def done(_):
             self.status.set('Antigravity 已退出，请重新准备迁移。' if action == 'close' else '已请求启动 Antigravity。迁移前需再次退出并重新准备。')
         self.start(lambda: service.app_action(config, action), done)
+        self.show_progress({'stage': {'close': '退出 Antigravity 并检查后台', 'open': '启动 Antigravity', 'restart': '重启 Antigravity'}[action]})
 
     def open_output(self):
         path = Path(self.last_session or self.vars['output'].get())
         if path.is_dir() and hasattr(os, 'startfile'):
             os.startfile(path)
+
+    def report_progress(self, event):
+        # Keep only the newest update; large file sets cannot flood the Tk queue.
+        try:
+            self.progress_events.put_nowait(event)
+        except queue.Full:
+            try:
+                self.progress_events.get_nowait()
+            except queue.Empty:
+                pass
+            self.progress_events.put_nowait(event)
+
+    def show_progress(self, event):
+        if isinstance(event, str):
+            event = {'stage': event}
+        self.progress.stop()
+        total, completed = event.get('total', 0), event.get('completed', 0)
+        label = event.get('stage', '处理中')
+        if total > 0:
+            self.progress.configure(mode='determinate', maximum=total, value=completed)
+            label += f" · 当前步骤 {completed:,}/{total:,} {event.get('unit', '')}（{completed / total:.0%}）"
+        else:
+            self.progress.configure(mode='indeterminate', maximum=100, value=0)
+            self.progress.start(12)
+            label += ' · 处理中（总量未知）'
+        project = event.get('project')
+        if project:
+            label = project + (f" [{event['project_index']}/{event['project_total']}]" if 'project_index' in event else '') + ' · ' + label
+        self.status.set(label)
+        self.progress_note.set(str(event.get('detail', ''))[-300:])
 
     def start(self, action, done):
         if self.busy:
@@ -409,8 +463,9 @@ class Window:
         self.previous_states = [(w, w.state()) for w in self.controls]
         for w, _ in self.previous_states:
             w.state(['disabled'])
-        self.progress.start(12)
-        self.status.set('正在处理，请稍候…')
+        self.started_at = time.monotonic()
+        self.elapsed.set('已用时 00:00')
+        self.show_progress({'stage': '开始处理', 'detail': '请等待当前操作完成'})
         def work():
             try:
                 self.events.put(('done', (done, action())))
@@ -419,11 +474,18 @@ class Window:
         threading.Thread(target=work, daemon=False).start()
 
     def poll(self):
+        if self.busy and self.started_at is not None:
+            seconds = int(time.monotonic() - self.started_at)
+            self.elapsed.set(f'已用时 {seconds // 60:02d}:{seconds % 60:02d}')
+        try:
+            self.show_progress(self.progress_events.get_nowait())
+        except queue.Empty:
+            pass
         try:
             while True:
                 kind, payload = self.events.get_nowait()
                 if kind == 'progress':
-                    self.status.set(payload)
+                    self.show_progress(payload)
                     continue
                 self.busy = False
                 self.progress.stop()
@@ -432,6 +494,8 @@ class Window:
                     w.state(previous)
                 if not self.current_plan:
                     self.apply_button.state(['disabled'])
+                self.progress.configure(mode='determinate', maximum=1, value=0 if kind == 'error' else 1)
+                self.progress_note.set('操作失败，请查看错误说明。' if kind == 'error' else '本次操作已完成；准备完成不代表已经执行导入。')
                 self.status.set('处理完成')
                 if kind == 'error':
                     self.error(payload)
@@ -469,10 +533,30 @@ def smoke_test():
     root.withdraw()
     try:
         app = Window(root)
+        root.attributes('-alpha', 0)
+        root.geometry('820x640')
+        root.deiconify()
+        root.update()
+        for widget in (app.next_button, app.progress):
+            assert widget.winfo_rooty() >= root.winfo_rooty()
+            assert widget.winfo_width() >= 60
+            assert widget.winfo_rootx() + widget.winfo_width() <= root.winfo_rootx() + root.winfo_width()
+            assert widget.winfo_rooty() + widget.winfo_height() <= root.winfo_rooty() + root.winfo_height(), 'Bottom controls clipped'
+        root.withdraw()
         root.update_idletasks()
         assert len(app.tabs.tabs()) == 3
         assert app.apply_button.instate(['disabled'])
         assert not app.projects and app.current_plan is None
+        app.show_progress({'stage': '测试阶段', 'completed': 2, 'total': 4, 'unit': '条'})
+        assert str(app.progress['mode']) == 'determinate' and float(app.progress['value']) == 2
+        assert '50%' in app.status.get()
+        app.show_progress({'stage': '测试校验'})
+        assert str(app.progress['mode']) == 'indeterminate' and '总量未知' in app.status.get()
+        for i in range(1000):
+            app.report_progress({'stage': '队列测试', 'completed': i, 'total': 1000})
+        assert app.progress_events.qsize() == 1
+        assert app.progress_events.get_nowait()['completed'] == 999
+        app.progress.stop()
         app.show_report('中文界面测试\nNo user data read.')
         assert '中文界面测试' in app.report.get('1.0', 'end')
         # Exercise the same callbacks and worker/event handoff as the GUI, with
