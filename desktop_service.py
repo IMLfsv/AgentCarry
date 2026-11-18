@@ -11,7 +11,7 @@ import publication
 import transfer
 from adapters import antigravity
 
-VERSION = '0.4.2-experimental'
+VERSION = '0.4.3-experimental'
 
 
 def defaults(home=None, env=None):
@@ -37,8 +37,9 @@ def source_projects(home):
              'available': root.is_dir(),
              'threads': [{'id': r['id'], 'title': r.get('title') or '(未命名会话)', 'cwd': r['cwd'],
                           'archived': bool(r.get('archived')),
-                          'available': bool(r.get('rollout_path')) and Path(r['rollout_path']).is_file(),
-                          'rollout_path': r.get('rollout_path', '')} for r in rows
+                          'available': bool(r.get('rollout_path')) and porter.resolve_rollout(home, r['rollout_path']).is_file(),
+                          'rollout_path': str(porter.resolve_rollout(home, r['rollout_path'])) if r.get('rollout_path') else '',
+                          'compressed': bool(r.get('rollout_path')) and porter.resolve_rollout(home, r['rollout_path']).suffix == '.zst'} for r in rows
                          if porter.inside(Path(r['cwd']).resolve(), root)]}
             for root in roots]
 
@@ -51,7 +52,7 @@ def selection_spec(home, projects, selected_roots, selected_threads, contexts=()
         if not project['available']:
             raise porter.PorterError('项目目录不存在，请取消选择或恢复原目录：' + project['path'])
         missing = [t for t in project['threads'] if not t.get('available', True)
-                   or (t.get('rollout_path') and not Path(t['rollout_path']).is_file())]
+                   or (t.get('rollout_path') and not porter.resolve_rollout(home, t['rollout_path']).is_file())]
         missing_ids = {t['id'] for t in missing}
         unavailable.extend({'project': project['name'], 'id': t['id'], 'title': t['title'],
                             'path': t.get('rollout_path', '')} for t in missing)

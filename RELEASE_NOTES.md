@@ -2,7 +2,7 @@
 
 Your projects. Your conversations. Your next AI.
 
-这是 Windows x64 下载测试版。下载 `AgentCarry-0.4.2-experimental-windows-x64.zip`，解压整个文件夹，双击 `AgentCarry.exe`。无需安装 Python。
+这是 Windows x64 下载测试版。下载 `AgentCarry-0.4.3-experimental-windows-x64.zip`，解压整个文件夹，双击 `AgentCarry.exe`。无需安装 Python。
 
 ## 可以做什么
 
@@ -30,3 +30,5 @@ Your projects. Your conversations. Your next AI.
 - 文件错误留在检查页并给出恢复或取消选择的处理说明。
 
 0.4.2 更新：项目默认展开，支持展开/收起全部会话，显示逐项目已选会话数；支持仅选项目文件。缺失会话单独排除并列入报告，不阻断项目及其他会话迁移。
+
+0.4.3 修复：支持 Codex .jsonl.zst 压缩聊天，索引保留旧 .jsonl 路径时自动识别压缩副本；解压到迁移包，不改动源文件。分支历史按解压后的字节偏移截取，仅收录所需父会话前缀；损坏、截断压缩流停止导出。

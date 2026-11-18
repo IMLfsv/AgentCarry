@@ -217,7 +217,7 @@ class Window:
             self.nodes[node] = ('project', project)
             for j, chat in enumerate(project['threads']):
                 child = f'{node}-c{j}'
-                label = ('☑ ' if chat['id'] in self.selected_threads else '☐ ') + chat['title'] + ('' if chat.get('available', True) else '（聊天文件缺失）')
+                label = ('☑ ' if chat['id'] in self.selected_threads else '☐ ') + chat['title'] + ('（压缩记录）' if chat.get('compressed') else '') + ('' if chat.get('available', True) else '（聊天文件缺失）')
                 self.tree.insert(node, 'end', iid=child, text=label, values=(chat['id'] if chat.get('available', True) else chat.get('rollout_path', '文件缺失'),))
                 self.nodes[child] = ('chat', (project, chat))
 

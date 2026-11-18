@@ -16,7 +16,7 @@ SOURCE_FILES = [
     'app.py', 'desktop.py', 'desktop_service.py', 'self_test.py', 'build_release.py', 'filesystem.py',
     'porter.py', 'migrate.py', 'transfer.py', 'publication.py', 'native_install.py',
     'antigravity_trial.py', 'demo.py', 'README.md', 'QUICKSTART.txt', 'ACCEPTANCE.md',
-    'VALIDATION.txt', 'RELEASE_NOTES.md', 'LICENSE', 'THIRD_PARTY_NOTICES.txt', 'licenses/Tcl.txt', '.gitignore', 'requirements-build.txt',
+    'VALIDATION.txt', 'RELEASE_NOTES.md', 'LICENSE', 'THIRD_PARTY_NOTICES.txt', 'licenses/Tcl.txt', '.gitignore', 'requirements-build.txt', 'requirements.txt',
     'adapters/__init__.py', 'adapters/antigravity.py', 'adapters/antigravity_codec.py',
     'examples/selection.example.json', '.github/workflows/build.yml',
     'tests/test_porter.py', 'tests/test_migrate.py', 'tests/test_native_install.py',
@@ -69,6 +69,12 @@ def build(out):
         if not original.is_file():
             raise RuntimeError('Missing runtime redistribution license: ' + str(original))
         shutil.copy2(original, licenses / name)
+    zstd_dist = importlib.metadata.distribution('zstandard')
+    zstd_licenses = [p for p in zstd_dist.files if '/licenses/' in str(p).replace('\\', '/')]
+    if not zstd_licenses:
+        raise RuntimeError('Missing Zstandard redistribution licenses')
+    for entry in zstd_licenses:
+        shutil.copy2(zstd_dist.locate_file(entry), licenses / ('zstandard-' + Path(entry).name))
     product_hashes = {p.relative_to(product).as_posix(): sha(p) for p in sorted(product.rglob('*')) if p.is_file()}
     (product / 'FILE_HASHES.json').write_text(json.dumps(product_hashes, indent=2) + '\n', encoding='utf-8')
     binary_zip = out / f'AgentCarry-{VERSION}-windows-x64.zip'

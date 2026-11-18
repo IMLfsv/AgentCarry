@@ -28,6 +28,20 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.config = antigravity.initialize_sandbox(self.root / 'target')
         self.output = self.root / 'output'
 
+    def test_catalog_recognizes_compressed_rollout_without_reading_content(self):
+        ident = self.spec['projects'][0]['threads'][0]
+        log = Path(self.spec['codex_home']) / 'sessions' / (ident + '.jsonl')
+        compressed = Path(str(log) + '.zst')
+        compressed.write_bytes(b'format checked only on export')
+        log.unlink()
+        projects = service.source_projects(self.spec['codex_home'])
+        chat = next(t for p in projects for t in p['threads'] if t['id'] == ident)
+        self.assertTrue(chat['available'])
+        self.assertTrue(chat['compressed'])
+        spec = service.selection_spec(self.spec['codex_home'], projects, {p['path'] for p in projects}, {ident})
+        self.assertEqual(sum(len(p['threads']) for p in spec['projects']), 1)
+        self.assertFalse(spec['unavailable_chats'])
+
     def test_missing_chat_is_visible_and_cannot_be_exported(self):
         ident = self.spec['projects'][0]['threads'][0]
         log = Path(self.spec['codex_home']) / 'sessions' / (ident + '.jsonl')

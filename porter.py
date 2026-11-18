@@ -151,6 +151,53 @@ def selection(home, project, ids=None):
     return matched
 
 
+def resolve_rollout(home, recorded):
+    """Resolve a logical .jsonl path without reading any conversation bytes."""
+    home = Path(home).resolve()
+    path = Path(recorded)
+    if not path.is_absolute():
+        path = home / path
+    path = path.resolve()
+    if not inside(path, home):
+        raise PorterError('Rollout path is outside the selected Codex home: ' + str(path))
+    if path.is_file():
+        return path
+    if path.name.endswith('.jsonl'):
+        compressed = Path(str(path) + '.zst')
+        if compressed.is_file():
+            return compressed
+    return path
+
+
+def zstd_blocks(source):
+    """Validate every frame, including EOF/checksums; bound decoded volume."""
+    try:
+        import zstandard
+    except ImportError as exc:
+        raise PorterError('Compressed chats require zstandard; install requirements.txt or use the current download.') from exc
+    decoder, total, frames = None, 0, 0
+    try:
+        with source.open('rb') as reader:
+            while data := reader.read(256):
+                while data:
+                    if decoder is None:
+                        decoder = zstandard.ZstdDecompressor(max_window_size=64 * CHUNK).decompressobj()
+                    block = decoder.decompress(data)
+                    total += len(block)
+                    if total > MAX_TOTAL:
+                        raise PorterError('Decompressed history exceeds size limit')
+                    if block:
+                        yield block
+                    data = decoder.unused_data if decoder.eof else b''
+                    if decoder.eof:
+                        frames += 1
+                        decoder = None
+        if decoder is not None or not frames:
+            raise PorterError('Truncated or empty Zstandard history')
+    except zstandard.ZstdError as exc:
+        raise PorterError('Invalid Zstandard history: ' + str(source)) from exc
+
+
 def metadata(path):
     with path.open('rb') as f:
         raw = f.readline(MAX_LINE + 1)
@@ -263,15 +310,18 @@ class BundleBuilder:
     def resolve_base(self, rollout_id):
         if not re.fullmatch(r'[0-9a-fA-F-]{36}', rollout_id or ''):
             raise PorterError('Invalid history_base rollout identifier')
-        matches = []
+        matches = set()
         for folder in ('sessions', 'archived_sessions'):
-            matches.extend((self.home / folder).rglob('*-' + rollout_id + '.jsonl'))
+            for pattern in ('*-' + rollout_id + '.jsonl', '*-' + rollout_id + '.jsonl.zst', rollout_id + '.jsonl', rollout_id + '.jsonl.zst'):
+                for path in (self.home / folder).rglob(pattern):
+                    logical = Path(str(path)[:-4]) if path.suffix == '.zst' else path
+                    matches.add(resolve_rollout(self.home, logical))
         if len(matches) != 1:
             raise PorterError('History dependency is missing or ambiguous: ' + rollout_id)
-        return matches[0]
+        return next(iter(matches))
 
     def copy_log(self, source, stack=(), limit=None):
-        source = source.resolve()
+        source = resolve_rollout(self.home, source).resolve()
         if source in stack:
             raise PorterError('Cycle in history dependencies')
         if len(stack) > 100:
@@ -279,10 +329,10 @@ class BundleBuilder:
         key = (source, limit)
         if key in self.raw_paths:
             return self.raw_paths[key]
-        if source.suffix != '.jsonl' or not inside(source, self.home):
+        if not source.name.endswith(('.jsonl', '.jsonl.zst')) or not inside(source, self.home):
             raise PorterError('Only JSONL rollouts inside the selected Codex home are supported')
         name = 'history/raw/' + str(len(self.raw_paths) + 1).zfill(5) + '.jsonl'
-        target = self.add_file(source, name, 'raw-history', limit)
+        target = self.add_compressed_log(source, name, limit) if source.suffix == '.zst' else self.add_file(source, name, 'raw-history', limit)
         meta = metadata(target)
         self.raw_paths[key] = target
         self.log_ids[target] = name
@@ -297,8 +347,31 @@ class BundleBuilder:
             self.copy_log(ancestor, (*stack, source), end)
         return target
 
+    def add_compressed_log(self, source, name, limit):
+        before = signature(source)
+        if limit is not None and limit < 1:
+            raise PorterError('History prefix is out of bounds')
+        target = self.stage / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        copied = 0
+        with target.open('xb') as writer:
+            for block in zstd_blocks(source):
+                # Offsets refer to decoded JSONL, never compressed bytes.
+                if limit is not None:
+                    block = block[:max(0, limit - copied)]
+                writer.write(block)
+                copied += len(block)
+        if limit is not None and copied != limit:
+            raise PorterError('History prefix extends beyond its source')
+        if signature(source) != before:
+            raise PorterError('Source changed during export: ' + str(source))
+        self.sources[source] = before
+        self.record_generated(target, name, 'raw-history')
+        self.entries[name]['source_encoding'] = 'zstd; archived as decoded JSONL'
+        return target
+
     def merged_records(self, source, limit=None, max_ordinal=None, stack=()):
-        source = source.resolve()
+        source = resolve_rollout(self.home, source).resolve()
         if source in stack:
             raise PorterError('Cycle in history dependencies')
         target = self.raw_paths[(source, limit)]
@@ -355,7 +428,7 @@ class BundleBuilder:
                 self.discover_assets(item)
 
     def project_thread(self, row, number):
-        source = Path(row['rollout_path']).resolve()
+        source = resolve_rollout(self.home, row['rollout_path']).resolve()
         target = self.copy_log(source)
         meta = metadata(target)
         mode = meta.get('history_mode', 'legacy')

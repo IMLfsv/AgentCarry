@@ -44,6 +44,10 @@ def run():
     with tempfile.TemporaryDirectory(prefix='porter-selftest-', dir=extended(tempfile.gettempdir(), force=True)) as temporary:
         root = Path(temporary)
         selection, expected = fixture(root)
+        import zstandard
+        compressed_log = Path(selection['codex_home']) / 'sessions' / (selection['projects'][1]['threads'][1] + '.jsonl')
+        Path(str(compressed_log) + '.zst').write_bytes(zstandard.ZstdCompressor().compress(compressed_log.read_bytes()))
+        compressed_log.unlink()
         target = antigravity.initialize_sandbox(root / 'different target account')
         layout = antigravity.paths(Path(target['home']), Path(target['ui']))
         initial = {k: publication.digest(layout[k]) for k in ('summary', 'cache', 'ui')}

@@ -64,6 +64,88 @@ class PorterTest(unittest.TestCase):
     def export(self, **kwargs):
         return porter.export_bundle(self.home, self.project, self.bundle, **kwargs)
 
+    def compress_log(self, path=None, data=None):
+        import zstandard
+        path = path or self.log
+        raw = path.read_bytes() if data is None else data
+        compressed = Path(str(path) + '.zst')
+        compressed.write_bytes(zstandard.ZstdCompressor(write_content_size=False, write_checksum=True).compress(raw))
+        path.unlink()
+        return compressed, raw
+
+    def test_compressed_history_resolves_and_preserves_decoded_bytes(self):
+        compressed, raw = self.compress_log()
+        before = compressed.read_bytes()
+        self.export()
+        with zipfile.ZipFile(self.bundle) as z:
+            self.assertEqual(z.read('history/raw/00001.jsonl'), raw)
+            manifest = json.loads(z.read('manifest.json'))
+            self.assertEqual(manifest['threads'][0]['counts']['message'], 2)
+        self.assertEqual(compressed.read_bytes(), before)
+        self.assertFalse(self.log.exists())
+
+    def test_compressed_archived_parent_uses_decoded_prefix_without_future(self):
+        prefix = self.log.stat().st_size
+        write_log(self.log, self.items + [message(3, 'user', 'PARENT_FUTURE_MUST_NOT_LEAK')])
+        compressed, _ = self.compress_log()
+        compressed.rename(self.home / 'archived_sessions' / compressed.name)
+        cid = str(uuid.uuid4())
+        child = self.home / 'sessions' / ('rollout-2026-' + cid + '.jsonl')
+        head = record(3, 'session_meta', {'id': cid, 'history_mode': 'paginated',
+                    'history_base': {'thread_id': self.id, 'end_byte_offset': prefix, 'end_ordinal_exclusive': 3}})
+        write_log(child, [head, message(4, 'user', 'Child'), message(5, 'assistant', 'Answer')])
+        self.add_thread(cid, child)
+        self.compress_log(child)
+        self.export(ids=[cid])
+        with zipfile.ZipFile(self.bundle) as z:
+            manifest = json.loads(z.read('manifest.json'))
+            self.assertEqual(manifest['threads'][0]['counts']['message'], 4)
+            for name in z.namelist():
+                self.assertNotIn(b'PARENT_FUTURE_MUST_NOT_LEAK', z.read(name))
+
+    def test_large_compressed_unicode_history_round_trip(self):
+        write_log(self.log, [self.meta, message(1, 'user', '中文内容' * 200000)])
+        _, raw = self.compress_log()
+        self.export()
+        with zipfile.ZipFile(self.bundle) as z:
+            self.assertEqual(z.read('history/raw/00001.jsonl'), raw)
+
+    def test_multiple_compressed_frames_are_not_silently_dropped(self):
+        import zstandard
+        raw = self.log.read_bytes()
+        mid = len(raw) // 2
+        compressed, _ = self.compress_log()
+        c = zstandard.ZstdCompressor()
+        compressed.write_bytes(c.compress(raw[:mid]) + c.compress(raw[mid:]))
+        self.export()
+        with zipfile.ZipFile(self.bundle) as z:
+            self.assertEqual(z.read('history/raw/00001.jsonl'), raw)
+
+    def test_truncated_compressed_frame_is_refused_even_after_complete_jsonl(self):
+        compressed, _ = self.compress_log()
+        compressed.write_bytes(compressed.read_bytes()[:-1])
+        with self.assertRaisesRegex(porter.PorterError, 'Truncated'):
+            self.export()
+        self.assertFalse(self.bundle.exists())
+
+    def test_compressed_corruption_and_size_limit_are_refused(self):
+        compressed, _ = self.compress_log()
+        data = compressed.read_bytes()
+        compressed.write_bytes(data[:-1] + bytes([data[-1] ^ 1]))
+        with self.assertRaisesRegex(porter.PorterError, 'Invalid Zstandard'):
+            self.export()
+        self.assertFalse(self.bundle.exists())
+        compressed.write_bytes(data)
+        with patch.object(porter, 'MAX_TOTAL', 10), self.assertRaisesRegex(porter.PorterError, 'size limit'):
+            self.export()
+        self.assertFalse(self.bundle.exists())
+
+    def test_uncompressed_history_takes_precedence_over_stale_compressed_copy(self):
+        Path(str(self.log) + '.zst').write_bytes(b'stale invalid data')
+        self.export()
+        with zipfile.ZipFile(self.bundle) as z:
+            self.assertEqual(z.read('history/raw/00001.jsonl'), self.log.read_bytes())
+
     def test_round_trip_preserves_project_raw_and_messages(self):
         (self.project / 'paper.txt').write_text('中文科研资料\n', encoding='utf-8')
         original = self.log.read_bytes()

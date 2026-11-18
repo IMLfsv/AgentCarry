@@ -14,3 +14,6 @@ PyInstaller's license includes an exception for generated application bundles.
 No Antigravity binaries, Codex installation files, account credentials, or real
 conversation/project data are included. Format compatibility research does not
 imply endorsement by the makers of those products.
+
+python-zstandard 0.25.0 / bundled Zstandard: see licenses/zstandard-* in the download.
+https://github.com/indygreg/python-zstandard

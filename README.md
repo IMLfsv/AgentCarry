@@ -4,9 +4,9 @@
 
 Your projects. Your conversations. Your next AI.
 
-[下载 Windows 测试版](https://github.com/IMLfsv/AgentCarry/releases/tag/v0.4.2-experimental) · [快速开始](QUICKSTART.txt) · [已知限制与验证范围](VALIDATION.txt)
+[下载 Windows 测试版](https://github.com/IMLfsv/AgentCarry/releases/tag/v0.4.3-experimental) · [快速开始](QUICKSTART.txt) · [已知限制与验证范围](VALIDATION.txt)
 
-把所选 **Codex 项目文件、对话、可识别附件和显式选择的规则/记忆文件** 一起迁移。Python 3.11+，标准库，无网络请求、无 API Key。
+把所选 **Codex 项目文件、对话、可识别附件和显式选择的规则/记忆文件** 一起迁移。Python 3.11+，依赖 zstandard（下载版已内置），迁移时无网络请求、无 API Key。
 
 “通用”指：输入由用户选择，换项目、会话、账号目录、恢复路径无需改源码；多个项目统一处理；不依赖固定测试词、会话 UUID 或手工修改数据库。其他平台通过适配器扩展，不代表所有平台和版本已经支持。
 
@@ -33,6 +33,7 @@ Your projects. Your conversations. Your next AI.
 测试均使用合成输入，不读取实际账户数据：
 
 ```powershell
+python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 python migrate.py --help
 python migrate.py scan --codex-home "C:/Users/YOUR_NAME/.codex"
