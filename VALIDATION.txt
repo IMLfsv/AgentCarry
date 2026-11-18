@@ -1,3 +1,12 @@
+0.5 same-machine update (2026-11-18 Asia/Shanghai)
+New tests cover original-directory registration, no project inventory/copy,
+chat-only bundles, separate explicit rule archives, code edits independent of
+chat deduplication, directory replacement refusal, and rollback preserving code.
+See current CI for the test count and packaged verification.
+This does not extend the previous real Antigravity runtime acceptance scope.
+
+Historical validation record follows:
+
 AgentCarry experimental 0.4 - validation record
 Date: 2026-11-18 (Asia/Shanghai)
 Environment: Windows, Python 3.12.0, NTFS, Antigravity App 2.32.2

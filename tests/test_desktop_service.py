@@ -28,12 +28,60 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.config = antigravity.initialize_sandbox(self.root / 'target')
         self.output = self.root / 'output'
 
+    def test_same_machine_never_copies_project_and_rolls_back_only_target(self):
+        import zipfile
+        project = Path(self.spec['projects'][0]['path'])
+        (project / 'AGENTS.md').write_text('Original project rules', encoding='utf-8')
+        (project / '.git').mkdir()
+        (project / '.git/config').write_text('original git metadata')
+        self.spec['projects'][0]['context_files'] = [str(project / 'AGENTS.md')]
+        before = {str(p.relative_to(project)): p.read_bytes() for p in project.rglob('*') if p.is_file()}
+        with patch.object(porter, 'inventory', side_effect=AssertionError('Must not scan project files')), \
+                patch.object(porter.BundleBuilder, 'project_files', side_effect=AssertionError('Must not copy project files')):
+            result = service.prepare(self.output, antigravity.ADAPTER, self.config, selection=self.spec)
+        plan = porter.read_json(Path(result['plan']))
+        self.assertEqual(plan['workspace_mode'], 'same-machine')
+        self.assertEqual({Path(p['workspace']).resolve() for p in plan['projects']},
+                         {Path(p['path']).resolve() for p in self.spec['projects']})
+        self.assertFalse((self.output / 'workspaces').exists())
+        job = porter.read_json(Path(result['job']))
+        for part in job['projects']:
+            with zipfile.ZipFile(Path(result['job']).parent / part['bundle']) as archive:
+                self.assertFalse(any(n.startswith(('project/', 'assets/')) for n in archive.namelist()))
+        self.assertEqual((Path(plan['projects'][0]['archive_root']) / 'context/0001.md').read_text(), 'Original project rules')
+        service.apply(Path(result['plan']))
+        from adapters import antigravity_codec as codec
+        layout = antigravity.paths(Path(self.config['home']), Path(self.config['ui']))
+        for entry in plan['projects']:
+            registration = porter.read_json(layout['projects'] / (entry['target_project_id'] + '.json'))
+            self.assertEqual(registration['projectResources']['resources'][0]['folderUri'], Path(entry['workspace']).as_uri())
+        # Ordinary code edits are independent of chat migration/deduplication.
+        (project / 'settings.json').write_text('changed by user')
+        again = service.prepare(self.output, antigravity.ADAPTER, self.config, selection=self.spec)
+        self.assertEqual(again['reused_projects'], 2)
+        service.recover(Path(result['plan']))
+        self.assertEqual((project / 'settings.json').read_text(), 'changed by user')
+        for name, data in before.items():
+            if name != 'settings.json':
+                self.assertEqual((project / name).read_bytes(), data)
+        self.assertFalse((project / '.agents').exists())
+
+    def test_same_machine_missing_or_replaced_source_blocks_native_write(self):
+        result = service.prepare(self.output, antigravity.ADAPTER, self.config, selection=self.spec)
+        project = Path(self.spec['projects'][0]['path'])
+        moved = project.with_name('moved-original')
+        project.rename(moved)
+        project.mkdir()
+        with self.assertRaisesRegex(porter.PorterError, '目录已被替换'):
+            service.apply(Path(result['plan']))
+        self.assertFalse((Path(result['plan']).parent / 'journal.json').exists())
+
     def test_progress_reports_real_work_counts_and_native_writes(self):
         events = []
         result = service.prepare(self.output, antigravity.ADAPTER, self.config,
                                  selection=self.spec, progress=events.append)
         stages = {e['stage'] for e in events if isinstance(e, dict)}
-        self.assertTrue({'复制文件', '导出会话', '打包项目', '检查会话转换', '恢复项目文件'} <= stages)
+        self.assertTrue({'关联原项目目录', '导出会话', '打包项目', '检查会话转换', '保存聊天档案并关联原目录'} <= stages)
         chats = [e for e in events if isinstance(e, dict) and e['stage'] == '导出会话']
         self.assertEqual(sum(e['completed'] == e['total'] for e in chats), 2)
         events.clear()
@@ -209,7 +257,7 @@ class DesktopWorkflowTests(unittest.TestCase):
             self.assertEqual(con.execute('SELECT title FROM conversation_summaries').fetchall(), [('keep',)])
 
     def test_user_facing_errors_explain_action(self):
-        self.assertIn('可移植模式', service.explain_error(RuntimeError('Unsupported installed build')))
+        self.assertIn('仅保存聊天档案模式', service.explain_error(RuntimeError('Unsupported installed build')))
         self.assertIn('退出', service.explain_error(RuntimeError('Close Antigravity')))
 
     def test_cli_report_can_be_used_without_console(self):

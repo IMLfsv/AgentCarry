@@ -58,6 +58,9 @@ def run():
         result = service.apply(Path(prepared['plan']))
         assert result['status'] == 'installed' and result['verification']['publication_snapshot_matches']
         plan = porter.read_json(Path(prepared['plan']))
+        assert plan['workspace_mode'] == 'same-machine'
+        assert {Path(p['workspace']).resolve() for p in plan['projects']} == {Path(p['path']).resolve() for p in selection['projects']}
+        assert not (root / 'migration output/workspaces').exists()
         for project in plan['projects']:
             assert (Path(project['workspace']) / 'settings.json').read_text() == '{"value": 123}\n'
             for chat in project['conversations']:
@@ -68,7 +71,7 @@ def run():
         assert initial == {k: publication.digest(layout[k]) for k in initial}
         assert all(publication.digest(Path(path)) == value for path, value in source.items())
         return {'passed': True, 'version': service.VERSION, 'projects': 2, 'conversations': 4,
-                'checks': ['export', 'cross-account-paths', 'native-format', 'project-files',
+                'checks': ['export', 'same-machine-original-directory', 'native-format', 'project-files',
                            'plan-does-not-write-profile', 'apply', 'deduplicate', 'recover', 'source-unchanged'],
                 'real_profiles_read': False, 'native_client_started': False,
                 'runtime_acceptance': 'not part of this isolated format test'}

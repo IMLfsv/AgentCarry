@@ -1,3 +1,15 @@
+# AgentCarry 0.5.0-experimental
+
+本版仅做同机迁移：Antigravity 项目直接关联原项目目录。
+代码、文档、数据、Git 和原规则留在原处，不扫描或打包整份项目。
+只转换所选聊天、存档历史记录和明确选择的额外文本规则；附件保留本机引用。
+额外规则仅存档，不自动改写原项目。报告、备份和回滚记录单独存放。
+
+旧复制模式的包请重新准备；已导入的复制目录不会自动改绑或合并。
+原生适配仍限 Windows Antigravity 2.32.2；macOS 暂停。
+
+以下为历史版本记录：
+
 # AgentCarry 0.4 — 带上项目和对话，换个 AI 接着干
 
 Your projects. Your conversations. Your next AI.

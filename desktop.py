@@ -13,7 +13,7 @@ import transfer
 from adapters import antigravity
 
 MODES = {'原生对话迁入 Antigravity（实验）': antigravity.ADAPTER,
-         '恢复项目文件与对话档案': 'portable'}
+         '仅保存聊天档案（同机，不写入客户端）': 'portable'}
 
 
 class Window:
@@ -53,7 +53,7 @@ class Window:
         self.include_internal, self.include_archived = tk.BooleanVar(root), tk.BooleanVar(root)
         self.lossy, self.activate = tk.BooleanVar(root), tk.BooleanVar(root)
         self.source_note = tk.StringVar(root, value='点击“读取项目”，只读取聊天目录元数据。勾选后才会导出对应内容。')
-        self.context_note = tk.StringVar(root, value='未选择额外记忆/规则文件；项目内的规则随项目复制。')
+        self.context_note = tk.StringVar(root, value='未选择额外记忆/规则文件；原项目规则保留在原目录。')
         self.status = tk.StringVar(root, value='就绪 · ' + service.VERSION)
         self._source_page()
         self._target_page()
@@ -118,14 +118,14 @@ class Window:
         actions.pack(fill='x', pady=8)
         for text, callback in [('读取项目', self.scan), ('添加项目目录…', self.add_project),
                                ('全选', lambda: self.choose_all(True)), ('取消全选', lambda: self.choose_all(False)),
-                               ('打开已有迁移包…', self.open_job)]:
+                               ('打开本机迁移记录…', self.open_job)]:
             self.button(actions, text, callback).pack(side='left', padx=(0, 6))
         detail_actions = ttk.Frame(page)
         detail_actions.pack(fill='x', pady=(0, 5))
         self.button(detail_actions, '展开全部会话', lambda: self.expand_projects(True)).pack(side='left')
         self.button(detail_actions, '收起全部项目', lambda: self.expand_projects(False)).pack(side='left', padx=6)
-        self.button(detail_actions, '仅选项目文件', self.choose_files_only).pack(side='left')
-        ttk.Label(page, text='展开项目后逐条勾选会话；取消所有会话仍可迁移项目文件。', style='Sub.TLabel').pack(anchor='w')
+        self.button(detail_actions, '仅关联项目（不选会话）', self.choose_files_only).pack(side='left')
+        ttk.Label(page, text='展开项目后逐条勾选会话；取消所有会话仍可关联原项目目录。', style='Sub.TLabel').pack(anchor='w')
         ttk.Label(page, textvariable=self.source_note, wraplength=850, style='Sub.TLabel').pack(anchor='w', pady=(0, 8))
         filters = ttk.Frame(page)
         filters.pack(fill='x', pady=(0, 5))
@@ -167,8 +167,8 @@ class Window:
         self.controls.append(combo)
         ttk.Label(page, text='原生导入目前支持 Windows Antigravity App 2.32.2。请在准备前完全退出目标客户端。',
                   wraplength=820, style='Sub.TLabel').pack(anchor='w', pady=(0, 12))
-        self.field(page, '迁移输出目录', self.vars['output'])
-        ttk.Label(page, text='项目恢复到输出目录的 workspaces；迁移包、报告和备份放在 runs。不要选择源项目内部。',
+        self.field(page, '迁移资料目录', self.vars['output'])
+        ttk.Label(page, text='仅同机迁移：项目直接使用原目录。archives 保存聊天档案，runs 保存报告与备份；不要选择源项目内部。',
                   wraplength=820, style='Sub.TLabel').pack(anchor='w', pady=(0, 10))
         paths = ttk.LabelFrame(page, text='目标路径（默认使用当前账户，可修改）', padding=10)
         paths.pack(fill='x', pady=8)
@@ -176,7 +176,7 @@ class Window:
         self.field(paths, 'App UI 数据目录', self.vars['ui'])
         self.field(paths, 'Antigravity 安装目录', self.vars['app_root'])
         self.check(page, '接受报告列出的转换差异：工具调用、图片等仅保留在档案中', self.lossy)
-        self.check(page, '将我选择的额外记忆/规则激活到各恢复项目', self.activate)
+        ttk.Label(page, text='规则/记忆：原文件保留；额外选择的文件仅单独存档，不自动写入项目。', wraplength=820, style='Sub.TLabel').pack(anchor='w', pady=6)
         ttk.Label(page, text='原始标题会存档，但客户端可能显示首条消息。原生工具记录与媒体重建尚未支持。',
                   wraplength=820, style='Sub.TLabel').pack(anchor='w', pady=(5, 10))
         row = ttk.Frame(outer)
@@ -324,7 +324,7 @@ class Window:
     def open_job(self):
         if self.busy:
             return
-        path = filedialog.askopenfilename(parent=self.root, title='打开迁移包中的 job.json', filetypes=[('迁移任务', 'job.json')])
+        path = filedialog.askopenfilename(parent=self.root, title='打开本机迁移记录中的 job.json', filetypes=[('迁移任务', 'job.json')])
         if not path:
             return
         def done(parts):
@@ -334,17 +334,17 @@ class Window:
             self.nodes.clear()
             for part in parts:
                 self.tree.insert('', 'end', text=part['name'], values=(f'{len(part["manifest"]["threads"])} 条会话',))
-            self.source_note.set('已打开迁移包，将迁入包内所选内容：' + path)
+            self.source_note.set('已打开本机迁移记录，项目将直接关联原目录：' + path)
             self.tabs.select(1)
         self.start(lambda: transfer.load_job(Path(path), progress=self.report_progress), done)
 
     def pick_context(self):
         if self.busy or self.job_path:
             return
-        files = filedialog.askopenfilenames(parent=self.root, title='选择应用于所有所选项目的额外文本记忆/规则',
+        files = filedialog.askopenfilenames(parent=self.root, title='选择需要单独存档的额外文本记忆/规则',
                                             filetypes=[('UTF-8 文本', '*.md *.txt')])
         self.contexts = list(dict.fromkeys([*self.contexts, *files]))
-        self.context_note.set(f'已选择 {len(self.contexts)} 份额外文件，将应用于所有所选项目。')
+        self.context_note.set(f'已选择 {len(self.contexts)} 份额外文件，将单独存档，不自动改写项目。')
         self.invalidate()
 
     def clear_context(self):
@@ -377,7 +377,7 @@ class Window:
                 self.current_plan = result['plan']
                 self.apply_button.state(['!disabled'])
             self.status.set({'blocked': '需要处理报告中的问题，可返回修改选项后重新准备。',
-                             'portable-restored': '已恢复文件与对话档案。',
+                             'portable-restored': '聊天档案已保存；项目仍在原目录。',
                              'ready-to-apply': '准备完成，请检查报告后执行导入。'}[result['status']])
         self.start(lambda: service.prepare(**kwargs), done)
 
@@ -396,13 +396,13 @@ class Window:
         if self.busy:
             return
         path = filedialog.askopenfilename(parent=self.root, title='选择要恢复的 plan.json', filetypes=[('迁移计划', 'plan.json')])
-        if path and messagebox.askyesno('恢复导入', '将恢复这次导入修改的 App 数据。已恢复的项目文件会保留；存在后续修改时会拒绝覆盖。请先退出 Antigravity。', parent=self.root):
-            self.start(lambda: service.recover(Path(path)), lambda _: self.show_report('已恢复这次原生导入。项目文件保留。'))
+        if path and messagebox.askyesno('恢复导入', '将恢复这次导入修改的 App 数据。原项目文件不会改动；存在后续修改时会拒绝覆盖。请先退出 Antigravity。', parent=self.root):
+            self.start(lambda: service.recover(Path(path)), lambda _: self.show_report('已恢复这次原生导入。原项目文件未改动。'))
 
     def checkpoint(self):
         if self.busy:
             return
-        if messagebox.askyesno('整理关闭后的数据库', '仅在完全退出 Antigravity 后使用。程序先备份数据库及残留日志，再由 SQLite 合并已提交的数据。备份放在迁移输出目录中。', parent=self.root):
+        if messagebox.askyesno('整理关闭后的数据库', '仅在完全退出 Antigravity 后使用。程序先备份数据库及残留日志，再由 SQLite 合并已提交的数据。备份放在迁移资料目录中。', parent=self.root):
             config, output = self.target_config(), self.vars['output'].get()
             self.start(lambda: service.checkpoint(config, output), lambda result: messagebox.showinfo(
                 '整理完成', '数据校验通过，备份保存在：\n' + result['backup'], parent=self.root))

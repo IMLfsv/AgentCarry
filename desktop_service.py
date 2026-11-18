@@ -11,7 +11,7 @@ import publication
 import transfer
 from adapters import antigravity
 
-VERSION = '0.4.5-experimental'
+VERSION = '0.5.0-experimental'
 
 
 def defaults(home=None, env=None):
@@ -89,13 +89,13 @@ def prepare(output, target, config=None, selection=None, existing_job=None,
     if selection:
         publication.save_json(run / 'selection.json', selection)
         progress('正在打包所选项目和会话…')
-        transfer.export_job(run / 'selection.json', run / 'private-job', progress)
+        transfer.export_job(run / 'selection.json', run / 'private-job', progress, same_machine=True)
         job = run / 'private-job/job.json'
     else:
         job = Path(existing_job).absolute()
     progress('正在校验迁移内容并准备恢复…')
-    result = migrate.make_plan(job, output / 'workspaces', run / 'plan', target, config,
-                               allow_lossy, activate_context, progress=progress)
+    result = migrate.make_plan(job, output / 'archives', run / 'plan', target, config,
+                               allow_lossy, activate_context, progress=progress, same_machine=True)
     result['job'] = str(job)
     result['session'] = str(run)
     result['summary'] = summary(Path(result['plan']))
@@ -185,7 +185,7 @@ def summary(plan_path):
         for issue in chat['issues']:
             issues[issue['code']] += issue.get('count', 1)
     lines = ['迁移报告', '', '状态：' + ('需要处理以下问题' if plan['blockers'] else
-                                     '可以执行原生导入' if native else '项目文件与对话档案已恢复'),
+                                     '可以执行原生导入' if native else '聊天档案已保存，项目继续使用原目录'),
              f'项目：{len(plan["projects"])}；本次新会话：{len(chats)}；复用项目：{sum(p["reused"] for p in plan["projects"])}',
              f'文字消息：{sum(len(c["messages"]) for c in chats)}；原生转换差异：{sum(issues.values())}', '']
     labels = {'tool_or_event_archived_only': '工具调用/其他事件仅存档',
@@ -200,8 +200,8 @@ def summary(plan_path):
         else:
             lines.append('需处理：' + blocker['code'])
     for project in plan['projects']:
-        lines += ['', project['name'], '恢复目录：' + project['workspace'],
-                  '状态：' + ('复用已有映射' if project['reused'] else '待恢复' if plan['blockers'] else '已恢复')]
+        lines += ['', project['name'], '原项目目录（直接关联）：' + project['workspace'],
+                  '状态：' + ('复用已有映射' if project['reused'] else '待关联' if plan['blockers'] else '原目录已确认，执行导入后关联' if native else '原目录已确认')]
         if project.get('source_exclusions'):
             lines.append(f'按策略排除 {len(project["source_exclusions"])} 项，详情见 report.json。')
         for chat in project['conversations'][:30]:
@@ -211,7 +211,9 @@ def summary(plan_path):
     if native:
         lines += ['', '当前原生适配：Windows Antigravity App 2.32.2。',
                   '原标题保存在档案中，但客户端可能改用首条消息显示；原生消息时间重新生成。',
-                  '导入后请检查：能续聊、找到新项目文件、重启仍保留。此报告不代表这些客户端检查已通过。']
+                  '导入后请检查：能续聊、访问原项目文件、重启仍保留。此报告不代表这些客户端检查已通过。']
+    lines += ['', '文件处理：代码/文档/数据和原规则留在原目录；聊天转换到目标客户端；附件保留本机引用。',
+              '额外选择的记忆/规则只存档，不自动改写原项目；报告、历史档案和备份位于迁移资料目录。']
     lines += ['', '完整差异报告：' + str(Path(plan_path).parent / 'report.json'),
               '恢复操作记录：' + str(plan_path)]
     return '\n'.join(lines) + '\n'
@@ -223,7 +225,7 @@ def explain_error(error):
         return ('Codex 索引仍有这条会话，但聊天文件不存在，可能已移动、归档或删除。\n'
                 '请返回“选择内容”重新读取项目，查看标为“聊天文件缺失”的会话。取消该会话后可迁移其余内容；如需保留它，请先从备份恢复文件。\n'
                 '重新启动 Antigravity 无法恢复缺失的 Codex 文件。\n\n缺失文件：' + str(error.filename))
-    guidance = [('Unsupported installed build', '当前 Antigravity 版本尚未适配。请使用可移植模式，或等待此版本的原生适配。'),
+    guidance = [('Unsupported installed build', '当前 Antigravity 版本尚未适配。请使用仅保存聊天档案模式，或等待此版本的原生适配。'),
                 ('Close Antigravity', '请完全退出 Antigravity 和后台进程，再重试。'),
                 ('SQLite sidecars', '请完全退出 Antigravity；若仍提示此问题，可使用“整理数据库”并保留自动备份。'),
                 ('not initialized', '请先正常启动 Antigravity 一次，建立数据目录后再完全退出。'),

@@ -213,6 +213,12 @@ def validate_plan(run, plan):
         allowed.add(str(layout['projects'] / (pid + '.json')))
         if not Path(project['workspace']).is_dir():
             raise porter.PorterError('Restored project is missing')
+        if plan.get('workspace_mode') == 'same-machine':
+            workspace = Path(project['workspace'])
+            files.no_links(workspace)
+            info = workspace.stat()
+            if project.get('directory_identity') != [info.st_dev, info.st_ino]:
+                raise porter.PorterError('原项目目录已被替换，请重新准备迁移。')
         for chat in project['conversations']:
             cid = str(uuid.UUID(chat['target_id']))
             allowed.add(str(layout['conversations'] / (cid + '.db')))

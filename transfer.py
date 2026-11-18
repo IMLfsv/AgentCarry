@@ -29,7 +29,7 @@ def local_path(base, value):
     return path.resolve()
 
 
-def export_job(spec_path, out, progress=lambda _: None):
+def export_job(spec_path, out, progress=lambda _: None, same_machine=False):
     """A spec selects physical roots, optional thread subsets, and context files."""
     spec_path, out = spec_path.resolve(), out.absolute()
     no_links(out)
@@ -89,7 +89,7 @@ def export_job(spec_path, out, progress=lambda _: None):
             progress({**event, 'project': item.get('name') or root.name, 'project_index': index, 'project_total': len(selected)})
         porter.export_bundle(home, root, out / name, ids,
                              [local_path(spec_path.parent, p) for p in item.get('asset_roots', [])],
-                             allow_empty=True, progress=project_progress)
+                             allow_empty=True, progress=project_progress, same_machine=same_machine)
         attached = []
         for ci, (path, data) in enumerate(contexts, 1):
             rel = f'context/{index:04d}-{ci:04d}.md'
@@ -259,3 +259,24 @@ def restore_project(part, destination, activate_context=False):
             'added_rules': added, 'rule_conflicts': conflicts,
             'explicit_context': 'activated' if activate_context else 'archived-only',
             'context_count': len(part['contexts'])}
+
+
+def archive_same_machine(part, destination):
+    """Restore only conversation archives; project files stay at their source."""
+    if part['manifest'].get('workspace_mode') != 'same-machine':
+        raise porter.PorterError('请重新准备同机迁移；旧的项目复制包不能直接用于此模式。')
+    if any(name.startswith(('project/', 'assets/')) for name in part['manifest']['entries']):
+        raise porter.PorterError('同机迁移包不得包含项目文件或附件副本。')
+    porter.restore_bundle(part['path'], destination)
+    save_json(destination / 'restore-receipt.json', {'status': 'same-machine-chat-archive',
+              'source_project': part['manifest']['source_project'],
+              'destination_project': part['manifest']['source_project'], 'project_files_copied': False})
+    for i, context in enumerate(part['contexts'], 1):
+        archive = destination / 'context' / f'{i:04d}.md'
+        archive.parent.mkdir(exist_ok=True)
+        archive.write_text(context['text'], encoding='utf-8')
+    mapping = {'workspace': part['manifest']['source_project'], 'project_files': 'referenced-in-place',
+               'chat_archive': str(destination / 'history'), 'rules': 'originals-unchanged',
+               'explicit_context': 'archived-only', 'context_count': len(part['contexts'])}
+    save_json(destination / 'file-roles.json', mapping)
+    return mapping

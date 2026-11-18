@@ -21,7 +21,7 @@ PLAN_FORMAT = 'agent-project-porter/plan/1'
 
 
 def make_plan(job_path, destination, run, target='portable', config=None,
-              allow_lossy=False, activate_context=False, max_total=porter.MAX_TOTAL, progress=lambda _: None):
+              allow_lossy=False, activate_context=False, max_total=porter.MAX_TOTAL, progress=lambda _: None, same_machine=False):
     if target not in TARGETS:
         raise porter.PorterError('Unknown target adapter')
     destination, run = destination.absolute(), run.absolute()
@@ -30,6 +30,12 @@ def make_plan(job_path, destination, run, target='portable', config=None,
     if run.exists() or porter.inside(run, destination) or porter.inside(destination, run):
         raise porter.PorterError('Plan directory must be new and separate from restored workspaces')
     parts = transfer.load_job(job_path, max_total, progress)
+    if same_machine and activate_context:
+        raise porter.PorterError('同机迁移不自动改写原项目规则；额外记忆/规则只单独存档。')
+    if same_machine:
+        for part in parts:
+            if part['manifest'].get('workspace_mode') != 'same-machine':
+                raise porter.PorterError('请重新读取本机项目并准备迁移，旧复制包不适用于同机模式。')
     native = TARGETS[target]
     if native:
         if not config:
@@ -47,7 +53,18 @@ def make_plan(job_path, destination, run, target='portable', config=None,
     # Preflight every project before restoring any of them.
     for part in parts:
         root = destination / transfer.folder_name(part['name'], part['key'])
-        workspace = root / 'project'
+        workspace = Path(part['manifest']['source_project']).resolve() if same_machine else root / 'project'
+        if same_machine:
+            files.no_links(workspace)
+            if not workspace.is_dir():
+                raise porter.PorterError('原项目目录不存在，请恢复原目录后再迁移：' + str(workspace))
+            if any(porter.inside(p, workspace) or porter.inside(workspace, p) for p in (run, destination)):
+                raise porter.PorterError('迁移资料目录不能与原项目目录重叠。')
+            if native and any(porter.inside(workspace, profile[k]) or porter.inside(profile[k], workspace)
+                              for k in ('store', 'projects', 'ui_root')):
+                raise porter.PorterError('原项目目录不能与目标客户端数据目录重叠。')
+            info = workspace.stat()
+            identity = [info.st_dev, info.st_ino]
         previous = ledger['projects'].get(part['key'])
         if previous:
             if (previous['fingerprint'] != part['fingerprint'] or
@@ -73,6 +90,7 @@ def make_plan(job_path, destination, run, target='portable', config=None,
             projects.append({'key': part['key'], 'fingerprint': part['fingerprint'],
                 'name': part['name'], 'workspace': str(workspace), 'reused': True,
                 'target_project_id': previous.get('target_project_id'), 'conversations': [],
+                'archive_root': str(root), 'directory_identity': identity if same_machine else None,
                 'activate_context': activate_context})
             continue
         if root.exists():
@@ -82,14 +100,15 @@ def make_plan(job_path, destination, run, target='portable', config=None,
                 raise porter.PorterError('Conversation already imported under another project: ' + thread['id'])
         projects.append({'key': part['key'], 'fingerprint': part['fingerprint'], 'name': part['name'],
             'workspace': str(workspace), 'reused': False, 'target_project_id': str(uuid.uuid4()),
-            'conversations': [], 'activate_context': activate_context})
+            'conversations': [], 'activate_context': activate_context, 'archive_root': str(root),
+            'directory_identity': identity if same_machine else None})
     run.mkdir(parents=True)
     marker = run / '.porter-incomplete'
     marker.write_text('Plan unfinished; do not apply.\n')
     for part, project in zip(parts, projects):
         if project['reused']:
             continue
-        root = Path(project['workspace']).parent
+        root = Path(project['archive_root']) if same_machine else Path(project['workspace']).parent
         suffixes = ['paths'] + ([f'context-{i:04d}' for i in range(1, len(part['contexts']) + 1)] if activate_context else [])
         if any(f'project/.agents/rules/porter-{part["key"][:12]}-{s}.md' in part['manifest']['entries'] for s in suffixes):
             blockers.append({'project': part['key'], 'code': 'migration_rule_name_conflict'})
@@ -123,11 +142,12 @@ def make_plan(job_path, destination, run, target='portable', config=None,
                      {'code': 'runtime_validation_scope', 'value': 'one text conversation on Windows 2.32.2; batch format tests separate'}]
     if not blockers:
         for index, (part, project) in enumerate(zip(parts, projects), 1):
-            progress({'stage': '恢复项目文件', 'detail': part['name'], 'completed': index - 1, 'total': len(projects), 'unit': '个项目'})
+            progress({'stage': '保存聊天档案并关联原目录' if same_machine else '恢复项目文件', 'detail': part['name'], 'completed': index - 1, 'total': len(projects), 'unit': '个项目'})
             if not project['reused']:
-                project['restore'] = transfer.restore_project(part, Path(project['workspace']).parent, activate_context)
+                project['restore'] = (transfer.archive_same_machine(part, Path(project['archive_root'])) if same_machine else
+                                      transfer.restore_project(part, Path(project['workspace']).parent, activate_context))
     plan = {'format': PLAN_FORMAT, 'created_at': porter.now(), 'target': target,
-            'target_config': config if native else None, 'projects': projects, 'blockers': blockers,
+            'target_config': config if native else None, 'workspace_mode': 'same-machine' if same_machine else 'copy', 'projects': projects, 'blockers': blockers,
             'warnings': warnings, 'can_apply': not blockers, 'allow_lossy': allow_lossy,
             'entries': [], 'privacy': 'PRIVATE: includes conversations and local paths'}
     if native and not blockers:
@@ -210,7 +230,7 @@ def main(argv=None):
             rows, projects = porter.catalog(args.codex_home.resolve())
             result = {'projects': projects, 'threads': rows, 'count': len(rows)}
         elif args.command == 'export':
-            result = transfer.export_job(args.spec, args.out)
+            result = transfer.export_job(args.spec, args.out, same_machine=True)
         elif args.command == 'verify-job':
             parts = transfer.load_job(args.job)
             result = {'verified': True, 'projects': len(parts),
@@ -230,7 +250,7 @@ def main(argv=None):
                 app = args.app_root or Path(os.environ.get('LOCALAPPDATA', '')) / 'Programs/antigravity'
                 config = {'home': str(args.target_home.absolute()), 'ui': str(ui.absolute()),
                           'app_root': str(app.absolute()), 'sandbox': args.sandbox}
-            result = make_plan(args.job, args.to, args.out, args.target, config, args.allow_lossy, args.activate_context)
+            result = make_plan(args.job, args.to, args.out, args.target, config, args.allow_lossy, args.activate_context, same_machine=True)
         elif args.command == 'verify-plan':
             result = verify_plan(args.plan)
         else:
