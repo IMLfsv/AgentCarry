@@ -37,11 +37,18 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.assertFalse(chat['available'])
         self.assertEqual(chat['rollout_path'], str(log))
         roots = {p['path'] for p in projects}
-        with self.assertRaisesRegex(porter.PorterError, '聊天文件缺失'):
-            service.selection_spec(self.spec['codex_home'], projects, roots, {ident})
+        files_only = service.selection_spec(self.spec['codex_home'], projects, roots, {ident})
+        self.assertEqual(sum(len(p['threads']) for p in files_only['projects']), 0)
+        self.assertEqual(files_only['unavailable_chats'][0]['id'], ident)
         good = {t['id'] for p in projects for t in p['threads'] if t['available']}
         spec = service.selection_spec(self.spec['codex_home'], projects, roots, good)
         self.assertEqual(sum(len(p['threads']) for p in spec['projects']), 3)
+        result = service.prepare(self.output, 'portable', selection=spec)
+        self.assertEqual(result['status'], 'portable-restored')
+        self.assertIn(ident, result['summary'])
+        plan = porter.read_json(Path(result['plan']))
+        self.assertTrue(all((Path(p['workspace']) / 'settings.json').is_file() for p in plan['projects']))
+        self.assertEqual(sum(len(p['conversations']) for p in plan['projects']), 3)
         error = FileNotFoundError(2, 'not found', str(log))
         self.assertIn('重新启动 Antigravity 无法恢复', service.explain_error(error))
 

@@ -11,7 +11,7 @@ import publication
 import transfer
 from adapters import antigravity
 
-VERSION = '0.4.1-experimental'
+VERSION = '0.4.2-experimental'
 
 
 def defaults(home=None, env=None):
@@ -44,21 +44,23 @@ def source_projects(home):
 
 
 def selection_spec(home, projects, selected_roots, selected_threads, contexts=()):
-    selected = []
+    selected, unavailable = [], []
     for project in projects:
         if project['path'] not in selected_roots:
             continue
         if not project['available']:
             raise porter.PorterError('项目目录不存在，请取消选择或恢复原目录：' + project['path'])
-        missing = [t for t in project['threads'] if t['id'] in selected_threads and not t.get('available', True)]
-        if missing:
-            raise porter.PorterError('所选会话的聊天文件缺失，请重新读取项目并取消这些会话：\n' + '\n'.join(t['title'] + '：' + t.get('rollout_path', '') for t in missing))
+        missing = [t for t in project['threads'] if not t.get('available', True)
+                   or (t.get('rollout_path') and not Path(t['rollout_path']).is_file())]
+        missing_ids = {t['id'] for t in missing}
+        unavailable.extend({'project': project['name'], 'id': t['id'], 'title': t['title'],
+                            'path': t.get('rollout_path', '')} for t in missing)
         selected.append({'path': project['path'], 'name': project['name'],
-                         'threads': [t['id'] for t in project['threads'] if t['id'] in selected_threads],
+                         'threads': [t['id'] for t in project['threads'] if t['id'] in selected_threads and t['id'] not in missing_ids],
                          'context_files': list(contexts)})
     if not selected:
         raise porter.PorterError('请至少选择一个项目。')
-    return {'codex_home': str(Path(home).expanduser().absolute()), 'projects': selected}
+    return {'codex_home': str(Path(home).expanduser().absolute()), 'projects': selected, 'unavailable_chats': unavailable}
 
 
 def prepare(output, target, config=None, selection=None, existing_job=None,
@@ -94,6 +96,10 @@ def prepare(output, target, config=None, selection=None, existing_job=None,
     result['job'] = str(job)
     result['session'] = str(run)
     result['summary'] = summary(Path(result['plan']))
+    if selection and selection.get('unavailable_chats'):
+        result['summary'] += '\n以下会话因源文件缺失未迁移；项目文件和其余所选会话不受影响：\n' + '\n'.join(
+            f"- {t['project']} / {t['title']}（{t['id']}）\n  {t['path']}" for t in selection['unavailable_chats']) + '\n'
+        publication.save_json(run / 'unavailable-chats.json', selection['unavailable_chats'])
     publication.save_json(run / 'session.json', {k: v for k, v in result.items() if k != 'summary'})
     (run / '迁移报告.txt').write_text(result['summary'], encoding='utf-8')
     return result

@@ -2,7 +2,7 @@
 
 Your projects. Your conversations. Your next AI.
 
-这是 Windows x64 下载测试版。下载 `AgentCarry-0.4.1-experimental-windows-x64.zip`，解压整个文件夹，双击 `AgentCarry.exe`。无需安装 Python。
+这是 Windows x64 下载测试版。下载 `AgentCarry-0.4.2-experimental-windows-x64.zip`，解压整个文件夹，双击 `AgentCarry.exe`。无需安装 Python。
 
 ## 可以做什么
 
@@ -28,3 +28,5 @@ Your projects. Your conversations. Your next AI.
 - 检查并执行页支持退出 Antigravity（含残留后台）、打开和重启；退出前提醒保存，先正常关闭，再清理所选安装目录下当前 Windows 会话的残留进程。
 - 读取项目时检查会话文件是否存在，缺失会话显示原路径且不可勾选，全选仅包含可用会话。不会静默迁移缺失会话。
 - 文件错误留在检查页并给出恢复或取消选择的处理说明。
+
+0.4.2 更新：项目默认展开，支持展开/收起全部会话，显示逐项目已选会话数；支持仅选项目文件。缺失会话单独排除并列入报告，不阻断项目及其他会话迁移。

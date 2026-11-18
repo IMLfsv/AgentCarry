@@ -92,6 +92,12 @@ class Window:
                                ('全选', lambda: self.choose_all(True)), ('取消全选', lambda: self.choose_all(False)),
                                ('打开已有迁移包…', self.open_job)]:
             self.button(actions, text, callback).pack(side='left', padx=(0, 6))
+        detail_actions = ttk.Frame(page)
+        detail_actions.pack(fill='x', pady=(0, 5))
+        self.button(detail_actions, '展开全部会话', lambda: self.expand_projects(True)).pack(side='left')
+        self.button(detail_actions, '收起全部项目', lambda: self.expand_projects(False)).pack(side='left', padx=6)
+        self.button(detail_actions, '仅选项目文件', self.choose_files_only).pack(side='left')
+        ttk.Label(page, text='展开项目后逐条勾选会话；取消所有会话仍可迁移项目文件。', style='Sub.TLabel').pack(anchor='w')
         ttk.Label(page, textvariable=self.source_note, wraplength=850, style='Sub.TLabel').pack(anchor='w', pady=(0, 8))
         area = ttk.Frame(page)
         area.pack(fill='both', expand=True)
@@ -197,13 +203,17 @@ class Window:
         self.start(lambda: service.source_projects(home), done)
 
     def draw_projects(self):
+        opened = {self.nodes[n][1]['path']: bool(self.tree.item(n, 'open'))
+                  for n in self.tree.get_children() if n in self.nodes and self.nodes[n][0] == 'project'}
         self.tree.delete(*self.tree.get_children())
         self.nodes.clear()
         for i, project in enumerate(self.projects):
             node = f'p{i}'
             chosen = project['path'] in self.selected_roots
-            label = ('☑ ' if chosen else '☐ ') + project['name'] + ('' if project['available'] else '（目录不存在）')
-            self.tree.insert('', 'end', iid=node, text=label, values=(project['path'],), open=False)
+            count = sum(t['id'] in self.selected_threads for t in project['threads'])
+            available = sum(t.get('available', True) for t in project['threads'])
+            label = ('☑ ' if chosen else '☐ ') + project['name'] + f'（已选 {count}/{available} 条可用会话；缺失 {len(project["threads"]) - available} 条）' + ('' if project['available'] else '（目录不存在）')
+            self.tree.insert('', 'end', iid=node, text=label, values=(project['path'],), open=opened.get(project['path'], True))
             self.nodes[node] = ('project', project)
             for j, chat in enumerate(project['threads']):
                 child = f'{node}-c{j}'
@@ -240,6 +250,18 @@ class Window:
         self.draw_projects()
         for n in opened:
             self.tree.item(n, open=True)
+
+    def expand_projects(self, opened):
+        if not self.busy:
+            for node in self.tree.get_children():
+                self.tree.item(node, open=opened)
+
+    def choose_files_only(self):
+        if not self.busy and not self.job_path:
+            self.selected_roots = {p['path'] for p in self.projects if p['available']}
+            self.selected_threads.clear()
+            self.invalidate()
+            self.draw_projects()
 
     def choose_all(self, selected):
         if self.busy or self.job_path:
@@ -462,6 +484,17 @@ def smoke_test():
             app.scan()
             finish()
             assert len(app.projects) == 2
+            assert all(app.tree.item(n, 'open') for n in app.tree.get_children())
+            app.choose_files_only()
+            assert len(app.selected_roots) == 2 and not app.selected_threads
+            app.expand_projects(False)
+            assert not any(app.tree.item(n, 'open') for n in app.tree.get_children())
+            app.expand_projects(True)
+            child = app.tree.get_children(app.tree.get_children()[0])[0]
+            app.tree.focus(child)
+            from types import SimpleNamespace
+            app.toggle(SimpleNamespace(keysym='space'))
+            assert len(app.selected_threads) == 1
             app.choose_all(True)
             assert len(app.selected_threads) == 4
             app.prepare()
