@@ -11,7 +11,7 @@ import publication
 import transfer
 from adapters import antigravity
 
-VERSION = '0.4.0-experimental'
+VERSION = '0.4.1-experimental'
 
 
 def defaults(home=None, env=None):
@@ -36,7 +36,9 @@ def source_projects(home):
     return [{'path': str(root), 'name': names.get(root) or root.name or str(root),
              'available': root.is_dir(),
              'threads': [{'id': r['id'], 'title': r.get('title') or '(未命名会话)', 'cwd': r['cwd'],
-                          'archived': bool(r.get('archived'))} for r in rows
+                          'archived': bool(r.get('archived')),
+                          'available': bool(r.get('rollout_path')) and Path(r['rollout_path']).is_file(),
+                          'rollout_path': r.get('rollout_path', '')} for r in rows
                          if porter.inside(Path(r['cwd']).resolve(), root)]}
             for root in roots]
 
@@ -48,6 +50,9 @@ def selection_spec(home, projects, selected_roots, selected_threads, contexts=()
             continue
         if not project['available']:
             raise porter.PorterError('项目目录不存在，请取消选择或恢复原目录：' + project['path'])
+        missing = [t for t in project['threads'] if t['id'] in selected_threads and not t.get('available', True)]
+        if missing:
+            raise porter.PorterError('所选会话的聊天文件缺失，请重新读取项目并取消这些会话：\n' + '\n'.join(t['title'] + '：' + t.get('rollout_path', '') for t in missing))
         selected.append({'path': project['path'], 'name': project['name'],
                          'threads': [t['id'] for t in project['threads'] if t['id'] in selected_threads],
                          'context_files': list(contexts)})
@@ -204,6 +209,10 @@ def summary(plan_path):
 
 def explain_error(error):
     text = str(error)
+    if isinstance(error, FileNotFoundError) and str(error.filename or '').lower().endswith('.jsonl'):
+        return ('Codex 索引仍有这条会话，但聊天文件不存在，可能已移动、归档或删除。\n'
+                '请返回“选择内容”重新读取项目，查看标为“聊天文件缺失”的会话。取消该会话后可迁移其余内容；如需保留它，请先从备份恢复文件。\n'
+                '重新启动 Antigravity 无法恢复缺失的 Codex 文件。\n\n缺失文件：' + str(error.filename))
     guidance = [('Unsupported installed build', '当前 Antigravity 版本尚未适配。请使用可移植模式，或等待此版本的原生适配。'),
                 ('Close Antigravity', '请完全退出 Antigravity 和后台进程，再重试。'),
                 ('SQLite sidecars', '请完全退出 Antigravity；若仍提示此问题，可使用“整理数据库”并保留自动备份。'),
@@ -217,3 +226,47 @@ def explain_error(error):
         if fragment in text:
             return message + '\n\n详细信息：' + text
     return text
+
+
+def app_action(config, action):
+    """Operate only processes from the selected installation in this session."""
+    import subprocess
+    if action not in ('close', 'open', 'restart') or os.name != 'nt':
+        raise porter.PorterError('此操作仅支持 Windows 的退出、打开或重启。')
+    root = Path(config['app_root']).expanduser().resolve()
+    exe = root / 'Antigravity.exe'
+    publication.no_links(exe)
+    if not exe.is_file():
+        raise porter.PorterError('找不到 Antigravity.exe，请在迁移位置中选择正确的安装目录。')
+    # Literal quoting: installation paths never become executable PowerShell code.
+    quoted = str(root).rstrip('\\').replace("'", "''") + '\\'
+    script = "$ErrorActionPreference='Stop'; $root='" + quoted + "'; " + r"""
+$session=(Get-Process -Id $PID).SessionId
+function Targets {
+  @(Get-Process | Where-Object {
+    $_.SessionId -eq $session -and $_.Path -and
+    $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)
+  })
+}
+"""
+    if action in ('close', 'restart'):
+        script += r"""
+foreach($p in (Targets)) { if($p.MainWindowHandle -ne 0) { [void]$p.CloseMainWindow() } }
+$until=(Get-Date).AddSeconds(8)
+while(@(Targets).Count -gt 0 -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 250 }
+foreach($p in (Targets)) { $p.Kill() }
+$until=(Get-Date).AddSeconds(5)
+while(@(Targets).Count -gt 0 -and (Get-Date) -lt $until) { Start-Sleep -Milliseconds 250 }
+if(@(Targets).Count -gt 0) { throw '仍有进程未退出，请检查权限后重试。' }
+"""
+    else:
+        script += "if(@(Targets).Count -gt 0) { throw 'Antigravity 已在运行。需要重新打开时请使用重启。' }; "
+    powershell = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    result = subprocess.run([str(powershell), '-NoProfile', '-NonInteractive', '-Command', script],
+                            capture_output=True, text=True, timeout=30,
+                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    if result.returncode:
+        raise porter.PorterError('Antigravity 操作未完成：' + result.stderr.strip())
+    if action in ('open', 'restart'):
+        subprocess.Popen([str(exe)], cwd=str(root))
+    return {'status': action}

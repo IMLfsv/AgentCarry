@@ -152,6 +152,10 @@ class Window:
 
     def _review_page(self):
         page = self.pages[2]
+        tools = ttk.Frame(page)
+        tools.pack(fill='x', pady=(0, 8))
+        for label, action in [('退出 Antigravity（含后台）', 'close'), ('打开 Antigravity', 'open'), ('重启 Antigravity', 'restart')]:
+            self.button(tools, label, lambda a=action: self.manage_app(a)).pack(side='left', padx=(0, 6))
         self.report = ScrolledText(page, wrap='word', font=('Microsoft YaHei UI', 10), relief='flat', padx=12, pady=12)
         self.report.pack(fill='both', expand=True)
         self.show_report('准备完成后，这里会显示项目、会话、恢复位置和转换差异。\n\n原生导入只会在你点击“执行导入”后写入目标 App。')
@@ -188,7 +192,8 @@ class Window:
             self.selected_threads.clear()
             self.invalidate()
             self.draw_projects()
-            self.source_note.set(f'找到 {len(projects)} 个项目、{sum(len(p["threads"]) for p in projects)} 条会话。请勾选要迁移的内容。')
+            missing = sum(not t.get('available', True) for p in projects for t in p['threads'])
+            self.source_note.set(f'聊天文件缺失 {missing} 条，已标记且不可勾选；全选仅选择可用会话。找到 {len(projects)} 个项目、{sum(len(p["threads"]) for p in projects)} 条会话。请勾选要迁移的内容。')
         self.start(lambda: service.source_projects(home), done)
 
     def draw_projects(self):
@@ -202,8 +207,8 @@ class Window:
             self.nodes[node] = ('project', project)
             for j, chat in enumerate(project['threads']):
                 child = f'{node}-c{j}'
-                label = ('☑ ' if chat['id'] in self.selected_threads else '☐ ') + chat['title']
-                self.tree.insert(node, 'end', iid=child, text=label, values=(chat['id'],))
+                label = ('☑ ' if chat['id'] in self.selected_threads else '☐ ') + chat['title'] + ('' if chat.get('available', True) else '（聊天文件缺失）')
+                self.tree.insert(node, 'end', iid=child, text=label, values=(chat['id'] if chat.get('available', True) else chat.get('rollout_path', '文件缺失'),))
                 self.nodes[child] = ('chat', (project, chat))
 
     def toggle(self, event):
@@ -221,10 +226,12 @@ class Window:
             selected = value['path'] not in self.selected_roots
             (self.selected_roots.add if selected else self.selected_roots.discard)(value['path'])
             for chat in value['threads']:
+                if not chat.get('available', True):
+                    continue
                 (self.selected_threads.add if selected else self.selected_threads.discard)(chat['id'])
         else:
             project, chat = value
-            if not project['available']:
+            if not project['available'] or not chat.get('available', True):
                 return
             self.selected_roots.add(project['path'])
             (self.selected_threads.discard if chat['id'] in self.selected_threads else self.selected_threads.add)(chat['id'])
@@ -238,7 +245,7 @@ class Window:
         if self.busy or self.job_path:
             return
         self.selected_roots = {p['path'] for p in self.projects if p['available']} if selected else set()
-        self.selected_threads = {t['id'] for p in self.projects if p['available'] for t in p['threads']} if selected else set()
+        self.selected_threads = {t['id'] for p in self.projects if p['available'] for t in p['threads'] if t.get('available', True)} if selected else set()
         self.invalidate()
         self.draw_projects()
 
@@ -343,6 +350,19 @@ class Window:
             self.start(lambda: service.checkpoint(config, output), lambda result: messagebox.showinfo(
                 '整理完成', '数据校验通过，备份保存在：\n' + result['backup'], parent=self.root))
 
+    def manage_app(self, action):
+        if self.busy:
+            return
+        if action in ('close', 'restart') and not messagebox.askyesno(
+                '请先保存 Antigravity 中的工作',
+                '请先保存未保存的文件，并等待正在生成的回复结束。程序会先请求退出，8 秒后结束残留后台进程。仅处理所选安装目录下、当前 Windows 会话的进程。是否继续？', parent=self.root):
+            return
+        config = self.target_config()
+        self.invalidate()
+        def done(_):
+            self.status.set('Antigravity 已退出，请重新准备迁移。' if action == 'close' else '已请求启动 Antigravity。迁移前需再次退出并重新准备。')
+        self.start(lambda: service.app_action(config, action), done)
+
     def open_output(self):
         path = Path(self.last_session or self.vars['output'].get())
         if path.is_dir() and hasattr(os, 'startfile'):
@@ -390,7 +410,9 @@ class Window:
 
     def error(self, exc):
         self.status.set('操作未完成，原始数据和已有备份保留。')
-        messagebox.showerror('需要处理', service.explain_error(exc), parent=self.root)
+        text = service.explain_error(exc)
+        self.show_report('操作未完成\n\n' + text)
+        messagebox.showerror('需要处理', text, parent=self.root)
 
     def close(self):
         if self.busy:
@@ -451,6 +473,14 @@ def smoke_test():
             assert app.current_plan is None and app.apply_button.instate(['disabled'])
             assert '导入完成' in app.report.get('1.0', 'end')
             service.recover(Path(plan))
+            missing_id = selection['projects'][0]['threads'][0]
+            (Path(selection['codex_home']) / 'sessions' / (missing_id + '.jsonl')).unlink()
+            app.scan()
+            finish()
+            app.choose_all(True)
+            assert len(app.selected_threads) == 3 and missing_id not in app.selected_threads
+            assert any('聊天文件缺失' in app.tree.item(child, 'text')
+                       for parent in app.tree.get_children() for child in app.tree.get_children(parent))
         return {'gui_initialized': True, 'tabs': 3, 'native_apply_disabled_until_plan': True,
                 'tk': tk.TkVersion, 'user_data_read': False,
                 'wizard_flow': ['scan', 'select', 'prepare', 'apply', 'verify', 'recover'],

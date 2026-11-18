@@ -28,6 +28,44 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.config = antigravity.initialize_sandbox(self.root / 'target')
         self.output = self.root / 'output'
 
+    def test_missing_chat_is_visible_and_cannot_be_exported(self):
+        ident = self.spec['projects'][0]['threads'][0]
+        log = Path(self.spec['codex_home']) / 'sessions' / (ident + '.jsonl')
+        log.unlink()
+        projects = service.source_projects(self.spec['codex_home'])
+        chat = next(t for p in projects for t in p['threads'] if t['id'] == ident)
+        self.assertFalse(chat['available'])
+        self.assertEqual(chat['rollout_path'], str(log))
+        roots = {p['path'] for p in projects}
+        with self.assertRaisesRegex(porter.PorterError, '聊天文件缺失'):
+            service.selection_spec(self.spec['codex_home'], projects, roots, {ident})
+        good = {t['id'] for p in projects for t in p['threads'] if t['available']}
+        spec = service.selection_spec(self.spec['codex_home'], projects, roots, good)
+        self.assertEqual(sum(len(p['threads']) for p in spec['projects']), 3)
+        error = FileNotFoundError(2, 'not found', str(log))
+        self.assertIn('重新启动 Antigravity 无法恢复', service.explain_error(error))
+
+    def test_app_controls_scope_processes_and_only_launch_after_success(self):
+        from types import SimpleNamespace
+        install = self.root / "App's folder"
+        install.mkdir()
+        (install / 'Antigravity.exe').write_bytes(b'fixture only')
+        config = {'app_root': str(install)}
+        with patch('subprocess.run', return_value=SimpleNamespace(returncode=0, stderr='')) as run, patch('subprocess.Popen') as launch:
+            service.app_action(config, 'close')
+            launch.assert_not_called()
+            script = run.call_args.args[0][-1]
+            self.assertIn("App''s folder", script)
+            self.assertIn('SessionId -eq $session', script)
+            self.assertIn('StartsWith($root', script)
+            self.assertIn('CloseMainWindow', script)
+            service.app_action(config, 'restart')
+            launch.assert_called_once()
+        with patch('subprocess.run', return_value=SimpleNamespace(returncode=1, stderr='denied')), patch('subprocess.Popen') as launch:
+            with self.assertRaises(porter.PorterError):
+                service.app_action(config, 'restart')
+            launch.assert_not_called()
+
     def test_defaults_follow_each_users_profile_and_custom_environment(self):
         for user in ('alice', '另一个用户'):
             home = self.root / user
