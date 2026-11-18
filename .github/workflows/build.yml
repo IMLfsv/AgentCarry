@@ -1,0 +1,62 @@
+name: Test and build Windows download
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Test migration logic
+        run: python -m unittest discover -s tests -v
+      - name: Install build tools
+        run: python -m pip install -r requirements-build.txt
+      - name: Build and test the downloaded app in a relocated fresh profile
+        run: python build_release.py --out release-output
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Windows-x64-experimental-download
+          path: |
+            release-output/*.zip
+            release-output/SHA256SUMS.txt
+            release-output/release-report.json
+          if-no-files-found: error
+  publish:
+    needs: windows
+    if: github.repository == 'IMLfsv/AgentCarry' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: Windows-x64-experimental-download
+          path: downloads
+      - name: Publish the verified experimental download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version downloads/release-report.json)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-experimental$ ]]
+          tag="v$version"
+          if state=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [[ "$state" == "false" ]]; then
+              echo "This version is already public; existing release files are preserved."
+              exit 0
+            fi
+            gh release upload "$tag" downloads/* --clobber
+          else
+            gh release create "$tag" downloads/* --draft --prerelease --target "$GITHUB_SHA" --title "AgentCarry $version" --notes-file RELEASE_NOTES.md
+          fi
+          gh release edit "$tag" --draft=false --prerelease --latest=false
