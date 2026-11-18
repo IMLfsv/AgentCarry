@@ -64,6 +64,33 @@ class PorterTest(unittest.TestCase):
     def export(self, **kwargs):
         return porter.export_bundle(self.home, self.project, self.bundle, **kwargs)
 
+    def test_internal_source_classification_does_not_use_titles(self):
+        for row, expected in [
+            ({'title': 'Guardian review'}, 'conversation'),
+            ({'source': 'vscode', 'thread_source': 'user'}, 'conversation'),
+            ({'thread_source': 'guardian_review'}, 'guardian'),
+            ({'source': '{"subagent":{"other":"guardian"}}'}, 'guardian'),
+            ({'source': '{"subagent":{"thread_spawn":{"depth":1}}}'}, 'subagent'),
+            ({'thread_source': 'subagent'}, 'subagent'),
+            ({'thread_source': 'agent_forked_thread'}, 'conversation'),
+            ({'thread_source': 'automation'}, 'automation')]:
+            with self.subTest(row=row):
+                self.assertEqual(porter.thread_kind(row), expected)
+
+    def test_named_internal_chat_requires_explicit_selection(self):
+        self.db.execute('ALTER TABLE threads ADD COLUMN name TEXT')
+        self.db.execute('ALTER TABLE threads ADD COLUMN thread_source TEXT')
+        self.db.execute('UPDATE threads SET name=?,thread_source=?', ('Renamed task', 'guardian_review'))
+        self.db.commit()
+        self.assertEqual(porter.selection(self.home, self.project), [])
+        self.assertEqual(porter.selection(self.home, self.project, [self.id])[0]['title'], 'Renamed task')
+        self.export(ids=[self.id])
+        with zipfile.ZipFile(self.bundle) as z:
+            chat = json.loads(z.read('manifest.json'))['threads'][0]
+            self.assertEqual(chat['title'], 'Renamed task')
+            self.assertEqual(chat['catalog_title'], 'Synthetic test')
+            self.assertEqual(chat['task_kind'], 'guardian')
+
     def compress_log(self, path=None, data=None):
         import zstandard
         path = path or self.log

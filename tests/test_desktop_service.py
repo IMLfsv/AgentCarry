@@ -28,6 +28,38 @@ class DesktopWorkflowTests(unittest.TestCase):
         self.config = antigravity.initialize_sandbox(self.root / 'target')
         self.output = self.root / 'output'
 
+    def test_sidebar_names_and_internal_task_filters(self):
+        ids = [t for p in self.spec['projects'] for t in p['threads']]
+        with closing(sqlite3.connect(Path(self.spec['codex_home']) / 'state_7.sqlite')) as con:
+            for field, kind in [('name', 'TEXT'), ('source', 'TEXT'), ('thread_source', 'TEXT'),
+                                ('archived', 'INTEGER'), ('updated_at_ms', 'INTEGER')]:
+                con.execute('ALTER TABLE threads ADD COLUMN ' + field + ' ' + kind)
+            con.execute("UPDATE threads SET source='vscode', thread_source='user', archived=0")
+            # A user can name an ordinary conversation Guardian review.
+            con.execute('UPDATE threads SET name=?,updated_at_ms=10 WHERE id=?', ('Guardian review', ids[0]))
+            con.execute('UPDATE threads SET source=?,thread_source=?,name=? WHERE id=?',
+                        (json.dumps({'subagent': {'other': 'guardian'}}), 'subagent', 'Internal review', ids[1]))
+            con.execute("UPDATE threads SET thread_source='automation' WHERE id=?", (ids[2],))
+            con.execute('UPDATE threads SET name=?,archived=1 WHERE id=?', ('Renamed archived chat', ids[3]))
+            con.commit()
+        normal = service.source_projects(self.spec['codex_home'])
+        chats = [t for p in normal for t in p['threads']]
+        self.assertEqual([t['id'] for t in chats], [ids[0]])
+        self.assertEqual(chats[0]['title'], 'Guardian review')
+        archived = service.source_projects(self.spec['codex_home'], include_archived=True)
+        self.assertEqual({t['id'] for p in archived for t in p['threads']}, {ids[0], ids[3]})
+        advanced = service.source_projects(self.spec['codex_home'], include_internal=True, include_archived=True)
+        self.assertEqual({t['id'] for p in advanced for t in p['threads']}, set(ids))
+        kinds = {t['id']: t['task_kind'] for p in advanced for t in p['threads']}
+        self.assertEqual(kinds[ids[1]], 'guardian')
+        self.assertEqual(kinds[ids[2]], 'automation')
+        chosen = service.selection_spec(self.spec['codex_home'], normal, {p['path'] for p in normal}, {ids[0]})
+        result = service.prepare(self.output, 'portable', selection=chosen)
+        plan = porter.read_json(Path(result['plan']))
+        imported = [t for p in plan['projects'] for t in p['conversations']]
+        self.assertEqual(len(imported), 1)
+        self.assertEqual(imported[0]['title'], 'Guardian review')
+
     def test_catalog_recognizes_compressed_rollout_without_reading_content(self):
         ident = self.spec['projects'][0]['threads'][0]
         log = Path(self.spec['codex_home']) / 'sessions' / (ident + '.jsonl')

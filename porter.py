@@ -114,12 +114,40 @@ def open_catalog(home):
     return con, cols
 
 
+def thread_kind(row):
+    """Use structural source metadata, never a title or message heuristic."""
+    source = row.get('source')
+    if isinstance(source, str):
+        try:
+            source = json.loads(source)
+        except (ValueError, TypeError):
+            pass
+    subtype = row.get('thread_source')
+    subagent = source.get('subagent') if isinstance(source, dict) else None
+    if subtype == 'guardian_review' or (isinstance(subagent, dict) and subagent.get('other') == 'guardian'):
+        return 'guardian'
+    if subtype == 'subagent' or (isinstance(source, dict) and 'subagent' in source) or source == 'subagent':
+        return 'subagent'
+    if subtype == 'automation':
+        return 'automation'
+    # Older catalogs have no source metadata. Preserve those user conversations.
+    return 'conversation'
+
+
 def catalog(home):
     con, cols = open_catalog(home)
     try:
         fields = [f for f in ('id', 'cwd', 'rollout_path', 'title', 'project_id',
-                              'history_mode', 'cli_version', 'archived') if f in cols]
+                              'history_mode', 'cli_version', 'archived', 'name', 'source', 'thread_source',
+                              'updated_at', 'updated_at_ms', 'recency_at', 'recency_at_ms') if f in cols]
         rows = [dict(r) for r in con.execute('SELECT ' + ','.join(fields) + ' FROM threads')]
+        for row in rows:
+            row['catalog_title'] = row['title']
+            if isinstance(row.get('name'), str) and row['name'].strip():
+                row['title'] = row['name']
+            row['task_kind'] = thread_kind(row)
+        rows.sort(key=lambda r: r.get('recency_at_ms') or r.get('updated_at_ms') or
+                  1000 * (r.get('recency_at') or r.get('updated_at') or 0), reverse=True)
         projects = []
         tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if {'projects', 'project_roots'} <= tables:
@@ -138,6 +166,8 @@ def selection(home, project, ids=None):
     project_ids = {p['id'] for p in projects if Path(p['path']).resolve() == project}
     matched = [r for r in rows if inside(Path(r['cwd']).resolve(), project) or
                r.get('project_id') in project_ids]
+    if ids is None:
+        matched = [r for r in matched if r['task_kind'] == 'conversation']
     if ids is not None:
         found = {r['id']: r for r in matched}
         missing = set(ids) - found.keys()
@@ -488,7 +518,8 @@ class BundleBuilder:
             self.warnings.append({'thread_id': row['id'], 'code': 'subagent_local_segment_only'})
         if not counts['message']:
             self.warnings.append({'thread_id': row['id'], 'code': 'no_visible_messages_projected'})
-        return {'id': row['id'], 'title': row['title'], 'source_cwd': row['cwd'],
+        return {'id': row['id'], 'title': row['title'], 'catalog_title': row.get('catalog_title'),
+                'task_kind': row.get('task_kind', 'conversation'), 'source_cwd': row['cwd'],
                 'source_project_id': row.get('project_id'),
                 'history_mode': mode, 'raw': self.log_ids[target], 'events': timeline_name,
                 'readable': markdown_name, 'counts': dict(counts), 'projection_omissions': dict(omitted),

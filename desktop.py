@@ -47,6 +47,7 @@ class Window:
         settings = service.defaults()
         self.vars = {k: tk.StringVar(root, value=v) for k, v in settings.items()}
         self.mode = tk.StringVar(root, value=next(iter(MODES)))
+        self.include_internal, self.include_archived = tk.BooleanVar(root), tk.BooleanVar(root)
         self.lossy, self.activate = tk.BooleanVar(root), tk.BooleanVar(root)
         self.source_note = tk.StringVar(root, value='点击“读取项目”，只读取聊天目录元数据。勾选后才会导出对应内容。')
         self.context_note = tk.StringVar(root, value='未选择额外记忆/规则文件；项目内的规则随项目复制。')
@@ -99,6 +100,13 @@ class Window:
         self.button(detail_actions, '仅选项目文件', self.choose_files_only).pack(side='left')
         ttk.Label(page, text='展开项目后逐条勾选会话；取消所有会话仍可迁移项目文件。', style='Sub.TLabel').pack(anchor='w')
         ttk.Label(page, textvariable=self.source_note, wraplength=850, style='Sub.TLabel').pack(anchor='w', pady=(0, 8))
+        filters = ttk.Frame(page)
+        filters.pack(fill='x', pady=(0, 5))
+        for text, var in [('显示归档对话', self.include_archived), ('显示内部/自动任务（高级）', self.include_internal)]:
+            box = ttk.Checkbutton(filters, text=text, variable=var, command=self.scan)
+            box.pack(side='left', padx=(0, 10))
+            self.controls.append(box)
+        ttk.Label(page, text='默认仅列普通对话；更改筛选会重新读取并清空勾选。', style='Sub.TLabel').pack(anchor='w')
         area = ttk.Frame(page)
         area.pack(fill='both', expand=True)
         self.tree = ttk.Treeview(area, columns=('detail',), selectmode='browse', height=10)
@@ -191,7 +199,10 @@ class Window:
                 var.set(path)
 
     def scan(self):
+        if self.busy:
+            return
         home = self.vars['codex_home'].get()
+        include_internal, include_archived = self.include_internal.get(), self.include_archived.get()
         def done(projects):
             self.projects, self.job_path = projects, None
             self.selected_roots.clear()
@@ -199,8 +210,8 @@ class Window:
             self.invalidate()
             self.draw_projects()
             missing = sum(not t.get('available', True) for p in projects for t in p['threads'])
-            self.source_note.set(f'聊天文件缺失 {missing} 条，已标记且不可勾选；全选仅选择可用会话。找到 {len(projects)} 个项目、{sum(len(p["threads"]) for p in projects)} 条会话。请勾选要迁移的内容。')
-        self.start(lambda: service.source_projects(home), done)
+            self.source_note.set(f'聊天文件缺失 {missing} 条，已标记且不可勾选；全选仅选择可用会话。当前筛选显示 {len(projects)} 个项目、{sum(len(p["threads"]) for p in projects)} 条会话。请勾选要迁移的内容。')
+        self.start(lambda: service.source_projects(home, include_internal, include_archived), done)
 
     def draw_projects(self):
         opened = {self.nodes[n][1]['path']: bool(self.tree.item(n, 'open'))
@@ -217,7 +228,8 @@ class Window:
             self.nodes[node] = ('project', project)
             for j, chat in enumerate(project['threads']):
                 child = f'{node}-c{j}'
-                label = ('☑ ' if chat['id'] in self.selected_threads else '☐ ') + chat['title'] + ('（压缩记录）' if chat.get('compressed') else '') + ('' if chat.get('available', True) else '（聊天文件缺失）')
+                kind = {'guardian': '【内部审查】', 'subagent': '【子代理】', 'automation': '【自动任务】'}.get(chat.get('task_kind'), '')
+                label = ('☑ ' if chat['id'] in self.selected_threads else '☐ ') + kind + chat['title'] + ('（已归档）' if chat.get('archived') else '') + ('（压缩记录）' if chat.get('compressed') else '') + ('' if chat.get('available', True) else '（聊天文件缺失）')
                 self.tree.insert(node, 'end', iid=child, text=label, values=(chat['id'] if chat.get('available', True) else chat.get('rollout_path', '文件缺失'),))
                 self.nodes[child] = ('chat', (project, chat))
 

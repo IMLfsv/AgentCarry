@@ -11,7 +11,7 @@ import publication
 import transfer
 from adapters import antigravity
 
-VERSION = '0.4.3-experimental'
+VERSION = '0.4.4-experimental'
 
 
 def defaults(home=None, env=None):
@@ -23,8 +23,10 @@ def defaults(home=None, env=None):
             'app_root': str(Path(env.get('LOCALAPPDATA', home / 'AppData/Local')) / 'Programs/antigravity')}
 
 
-def source_projects(home):
+def source_projects(home, include_internal=False, include_archived=False):
     rows, registrations = porter.catalog(Path(home).expanduser().resolve())
+    rows = [r for r in rows if (include_internal or r['task_kind'] == 'conversation')
+            and (include_archived or not r.get('archived'))]
     names = {Path(r['path']).resolve(): r['name'] for r in registrations}
     candidates = set(names)
     candidates.update(Path(row['cwd']).resolve() for row in rows
@@ -36,7 +38,7 @@ def source_projects(home):
     return [{'path': str(root), 'name': names.get(root) or root.name or str(root),
              'available': root.is_dir(),
              'threads': [{'id': r['id'], 'title': r.get('title') or '(未命名会话)', 'cwd': r['cwd'],
-                          'archived': bool(r.get('archived')),
+                          'archived': bool(r.get('archived')), 'task_kind': r['task_kind'],
                           'available': bool(r.get('rollout_path')) and porter.resolve_rollout(home, r['rollout_path']).is_file(),
                           'rollout_path': str(porter.resolve_rollout(home, r['rollout_path'])) if r.get('rollout_path') else '',
                           'compressed': bool(r.get('rollout_path')) and porter.resolve_rollout(home, r['rollout_path']).suffix == '.zst'} for r in rows

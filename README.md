@@ -4,7 +4,7 @@
 
 Your projects. Your conversations. Your next AI.
 
-[下载 Windows 测试版](https://github.com/IMLfsv/AgentCarry/releases/tag/v0.4.3-experimental) · [快速开始](QUICKSTART.txt) · [已知限制与验证范围](VALIDATION.txt)
+[下载 Windows 测试版](https://github.com/IMLfsv/AgentCarry/releases/tag/v0.4.4-experimental) · [快速开始](QUICKSTART.txt) · [已知限制与验证范围](VALIDATION.txt)
 
 把所选 **Codex 项目文件、对话、可识别附件和显式选择的规则/记忆文件** 一起迁移。Python 3.11+，依赖 zstandard（下载版已内置），迁移时无网络请求、无 API Key。
 
@@ -15,7 +15,7 @@ Your projects. Your conversations. Your next AI.
 ## 下载包的使用流程
 
 1. 解压 Windows x64 ZIP，保留 `_internal` 文件夹，双击 EXE。
-2. 读取本机 Codex 项目并勾选会话，或打开已有迁移包的 `job.json`。
+2. 读取本机 Codex 项目并逐条勾选会话，或打开已有迁移包的 `job.json`。默认使用侧栏名称，只显示普通、未归档的对话；“显示归档对话”和“显示内部/自动任务（高级）”可分别打开。内部任务会标注类型，不自动合并到主对话。
 3. 选择目标方式和输出目录，点击“准备并检查迁移”。
 4. 阅读报告；原生模式通过检查后点击“执行导入”。
 5. 启动目标 App 检查能否续聊、访问正确项目，重启后再确认。
