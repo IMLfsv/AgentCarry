@@ -49,7 +49,7 @@ class DesktopWorkflowTests(unittest.TestCase):
         projects = service.source_projects(self.spec['codex_home'])
         chat = next(t for p in projects for t in p['threads'] if t['id'] == ident)
         self.assertFalse(chat['available'])
-        self.assertEqual(chat['rollout_path'], str(log))
+        self.assertEqual(Path(chat['rollout_path']).resolve(), log.resolve())
         roots = {p['path'] for p in projects}
         files_only = service.selection_spec(self.spec['codex_home'], projects, roots, {ident})
         self.assertEqual(sum(len(p['threads']) for p in files_only['projects']), 0)
