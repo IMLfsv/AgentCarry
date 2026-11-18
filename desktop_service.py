@@ -60,6 +60,7 @@ def prepare(output, target, config=None, selection=None, existing_job=None,
             allow_lossy=False, activate_context=False, progress=lambda _: None):
     output = Path(output).expanduser().absolute()
     publication.no_links(output)
+    output = output.resolve()
     # Refuse mixed/missing inputs, and check compatibility before exporting data.
     if (selection is None) == (existing_job is None):
         raise porter.PorterError('请选择本机项目，或打开一个迁移包。')

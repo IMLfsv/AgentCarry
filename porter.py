@@ -131,6 +131,7 @@ def catalog(home):
 
 
 def selection(home, project, ids=None):
+    home, project = Path(home).resolve(), Path(project).resolve()
     rows, projects = catalog(home)
     # An explicit single folder is the v0.1 boundary. Multi-root projects must
     # not be silently treated as fully exported from one folder.
