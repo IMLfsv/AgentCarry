@@ -1,0 +1,7 @@
+{
+  "codex_home": "~/.codex",
+  "projects": [
+    {"name": "Project A", "path": "D:/Work/project-a"},
+    {"name": "Project B", "path": "D:/Work/project-b"}
+  ]
+}

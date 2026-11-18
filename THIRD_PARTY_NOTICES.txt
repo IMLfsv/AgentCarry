@@ -1,0 +1,16 @@
+AgentCarry is MIT licensed (see LICENSE).
+
+The Windows distribution includes the Python interpreter, its standard library,
+Tcl/Tk, and a PyInstaller bootloader. Their license texts are redistributed in
+licenses/. Python itself may include components under additional licenses; the
+Python license text includes the associated notices.
+
+Python: https://docs.python.org/3/license.html
+Tcl/Tk: https://www.tcl-lang.org/software/tcltk/license.html
+Bundled Tcl fallback notice: https://github.com/tcltk/tcl/blob/core-8-6-13/license.terms
+PyInstaller: https://pyinstaller.org/en/stable/license.html
+PyInstaller's license includes an exception for generated application bundles.
+
+No Antigravity binaries, Codex installation files, account credentials, or real
+conversation/project data are included. Format compatibility research does not
+imply endorsement by the makers of those products.

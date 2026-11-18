@@ -1,0 +1,99 @@
+AgentCarry experimental 0.4 - validation record
+Date: 2026-11-18 (Asia/Shanghai)
+Environment: Windows, Python 3.12.0, NTFS, Antigravity App 2.32.2
+
+AUTOMATED TESTS: PASS, 76 tests (Windows, Python 3.12.0).
+Command: python -m unittest discover -s tests -q
+Covers offline bundles, branch prefixes, checksums, unsafe archives, native text
+encoding, version/index requirements, publication failure recovery, refusal to
+replace appended turns, and recovery of committed rows from a SQLite WAL.
+
+GENERAL INPUT PIPELINE (0.3): IMPLEMENTED; FORMAT TESTS PASS.
+migrate.py accepts user-selected project roots, chat subsets, and explicit text
+context. transfer.py and target adapters have no dependency on the trial fixture.
+The source catalog is discovered by schema and versioned filename, not state_5.
+Tests generate fresh accounts, UUIDs, two history formats, same-name projects,
+Chinese/space paths, and an empty-chat project; export, restore, stage and apply
+four chats in three projects while preserving an unrelated target conversation.
+Planning leaves native storage unchanged. Repeated imports reuse the mapping,
+preserve edited workspace files, and refuse changed source snapshots. Multi-root
+logical projects can be selected as physical roots with scope notes. Tests also
+cover mixed tools/text blocking, explicit archive-only acceptance, unknown source
+events, context activation/archive, injected publication failure, recovery,
+target/staging tampering, aggregate limits and unsupported build/schema refusal.
+These are offline disposable-profile tests, NOT new live App acceptance tests.
+
+DOWNLOAD WORKFLOW (0.4):
+Added a local Tk GUI, per-user defaults, project/chat selection, existing bundle
+import, readable reports, native apply/recover, and an explicit backed-up WAL
+checkpoint operation. Unsupported projections are analyzed before creating
+restored projects, so an accepted-differences retry can use the same destination.
+The shipped self-test generates two projects/four chats in disposable profiles.
+The Windows build script bundles the interpreter and GUI dependencies, extracts
+the downloadable ZIP into a Unicode path, clears Python from child PATH, assigns
+a fresh child-only profile and runs both migration and hidden-GUI self-tests.
+The GUI test also drives its scan/selection/prepare/apply callbacks and background
+worker completion using two generated projects/four chats, then verifies recovery.
+The adjacent release-report.json records whether those packaged checks passed.
+A different physical computer and multiple real-user native histories remain
+outside the demonstrated runtime scope.
+Windows extended paths are applied only at file I/O and SQLite URI boundaries;
+stored paths and workspace URIs remain ordinary paths. A generated source,
+profile and restored workspace with paths exceeding 260 characters is tested
+without changing the machine's LongPathsEnabled registry setting.
+
+OFFLINE SYNTHETIC DEMO: PASS, 8 end-to-end checks.
+Project and raw message bytes survive export/restore. Branch context is retained
+without later parent messages; explicit exclusions are reported. Read-only probes
+also recognized a local Codex catalog and three real headers. No real user
+conversation/project was migrated end-to-end for this validation.
+
+NATIVE SYNTHETIC CASE: CORE ACCEPTANCE PASS.
+Source: four visible messages in a synthetic Codex paginated rollout and a small
+project with JSON input and a UTF-8 Chinese filename. A conversation-only marker
+was absent from project files and the continuation prompt.
+
+1. Initial startup failed because user_version=0 triggered legacy migration that
+   discarded root metadata and project association. The writer now uses version 1.
+2. Control runs with the installed backend in disposable child-only profiles
+   reproduced the failure and verified the fix. No login state was copied; model
+   endpoints used loopback. The harness stopped only its own backend processes
+   after startup; those runs alone did not prove model replies or GUI operation.
+3. The fixed candidate was installed with fresh backups and process guards.
+   Existing conversations and project configs were preserved.
+4. In the actual client the imported conversation continued successfully. It
+   recalled the marker, read inputs/settings.json, and wrote result.txt = 343
+   in the restored project. The original project and restored input hashes match.
+5. Database inspection confirmed the same conversation/project IDs, the four
+   original messages, new user turn, two file tool calls and final assistant reply:
+   six visible messages and 11 stored steps. The recorded tools only read the
+   expected JSON and wrote the result file, with no archive reads recorded.
+6. The user confirmed the new reply remained visible after restarting the client.
+   A new backend process/start time was observed. Post-restart checks confirmed
+   all six messages, both tool calls, project binding, version 1 and result=343
+   persisted; no duplicate conversation was created. The original calibration
+   conversation retained its exact file hash.
+
+EVIDENCE LIMITS:
+UI visibility is user-reported; no screenshot-based UI test was performed.
+Live verification used hash-stable DB/WAL copies with integrity checks, not a
+transactionally guaranteed live SQLite snapshot. Fresh stopped backups were
+used for installation. A consistent SQLite backup preceded the WAL checkpoint.
+
+KNOWN FAILURE:
+Original title preservation fails after continuation: title is empty and preview
+uses the first message. Conversation identity, content and project are retained.
+
+NOT PROVEN / NOT IMPLEMENTED:
+Multiple real users' Codex native imports; long/complex native conversations; historical tool
+or media migration; subagent parent reconstruction; global platform memory;
+other App versions/platforms; file ACL or executable-mode preservation.
+The new input pipeline is not fixture-restricted, but the native adapter remains
+pinned to the observed Windows App build. The old trial installer stays isolated
+as historical tooling. General input support is not proof of lossless native
+conversion, support for all clients, or model-context retention for arbitrary
+large histories. No multi-user or cross-OS native runtime claim is made.
+
+PUBLIC SOURCE PACKAGE:
+Original program code, documentation and synthetic tests only. No real App
+store, account credentials, project copies or chat exports are included.
