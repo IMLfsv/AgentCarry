@@ -11,7 +11,7 @@ import publication
 import transfer
 from adapters import antigravity
 
-VERSION = '0.5.0-experimental'
+VERSION = '0.5.1-experimental'
 
 
 def defaults(home=None, env=None):

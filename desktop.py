@@ -30,51 +30,107 @@ class Window:
         root.geometry(f'{width}x{height}')
         root.minsize(min(820, width), min(640, height))
         root.protocol('WM_DELETE_WINDOW', self.close)
+        self.colors = {'canvas': '#F4F5F2', 'paper': '#FFFFFF', 'ink': '#24332C',
+                       'muted': '#738078', 'line': '#E2E7E1', 'accent': '#456653', 'wash': '#EDF3ED'}
+        c = self.colors
+        root.configure(background=c['canvas'])
         style = ttk.Style(root)
-        if 'clam' in style.theme_names():
-            style.theme_use('clam')
-        style.configure('.', font=('Microsoft YaHei UI', 10))
-        style.configure('Title.TLabel', font=('Microsoft YaHei UI', 21, 'bold'))
-        style.configure('Sub.TLabel', foreground='#526173')
-        style.configure('Treeview', rowheight=29)
-        style.configure('TButton', padding=(10, 6))
-        frame = ttk.Frame(root, padding=22)
+        style.theme_use('clam')
+        style.configure('.', font=('Microsoft YaHei UI', 10), background=c['paper'], foreground=c['ink'])
+        style.configure('TFrame', background=c['paper'])
+        style.configure('Shell.TFrame', background=c['canvas'])
+        style.configure('TLabel', background=c['paper'], foreground=c['ink'])
+        style.configure('Title.TLabel', font=('Microsoft YaHei UI', 18, 'bold'))
+        style.configure('Sub.TLabel', foreground=c['muted'], font=('Microsoft YaHei UI', 9))
+        style.configure('Brand.TLabel', background=c['canvas'], font=('Segoe UI', 15, 'bold'))
+        style.configure('Shell.TLabel', background=c['canvas'], foreground=c['muted'], font=('Microsoft YaHei UI', 9))
+        style.configure('Section.TLabel', font=('Microsoft YaHei UI', 10, 'bold'))
+        style.configure('TButton', padding=(14, 8), relief='flat', borderwidth=1,
+                        background=c['paper'], bordercolor=c['line'], lightcolor=c['paper'], darkcolor=c['paper'])
+        style.map('TButton', background=[('active', c['wash']), ('pressed', '#E0E9DF')],
+                  foreground=[('disabled', '#A4ADA7')], bordercolor=[('focus', c['accent'])])
+        style.configure('Accent.TButton', background=c['accent'], foreground='white', borderwidth=0,
+                        font=('Microsoft YaHei UI', 10, 'bold'), padding=(22, 9))
+        style.map('Accent.TButton', background=[('disabled', '#E1E7E1'), ('pressed', '#314D3B'), ('active', '#53775E')],
+                  foreground=[('disabled', '#97A499'), ('!disabled', 'white')])
+        style.configure('Quiet.TButton', borderwidth=0, background=c['paper'], foreground=c['muted'], padding=(8, 6))
+        style.configure('TMenubutton', padding=(12, 8), relief='flat', borderwidth=0, background=c['paper'])
+        style.map('TMenubutton', background=[('active', c['wash'])])
+        style.configure('TEntry', padding=8, fieldbackground='#FAFBF8', bordercolor=c['line'],
+                        lightcolor=c['line'], darkcolor=c['line'])
+        style.map('TEntry', bordercolor=[('focus', c['accent'])])
+        style.configure('TCombobox', padding=8, fieldbackground='#FAFBF8', bordercolor=c['line'], arrowsize=14)
+        style.map('TCombobox', fieldbackground=[('readonly', '#FAFBF8')], selectbackground=[('readonly', '#FAFBF8')],
+                  selectforeground=[('readonly', c['ink'])])
+        style.configure('TCheckbutton', background=c['paper'], padding=(0, 5))
+        style.map('TCheckbutton', background=[('active', c['paper'])], indicatorbackground=[('selected', c['accent'])])
+        style.configure('TNotebook', background=c['canvas'], borderwidth=0, tabmargins=(0, 0, 0, 8))
+        style.layout('TNotebook', [])
+        style.layout('TNotebook.Tab', [('Notebook.padding', {'sticky': 'nswe', 'children': [
+            ('Notebook.focus', {'sticky': 'nswe', 'children': [('Notebook.label', {'sticky': 'nswe'})]})]})])
+        style.configure('TNotebook.Tab', padding=(18, 10), background=c['canvas'], foreground=c['muted'],
+                        font=('Microsoft YaHei UI', 10, 'bold'), focuscolor=c['accent'])
+        style.map('TNotebook.Tab', padding=[('selected', (18, 10))], foreground=[('selected', c['accent'])])
+        style.configure('Treeview', rowheight=38, background=c['paper'], fieldbackground=c['paper'],
+                        foreground=c['ink'], borderwidth=0, bordercolor=c['paper'], lightcolor=c['paper'], darkcolor=c['paper'])
+        style.configure('Treeview.Heading', font=('Microsoft YaHei UI', 9), padding=(10, 9),
+                        background='#F7F9F5', foreground=c['muted'], relief='flat', borderwidth=0)
+        style.map('Treeview', background=[('selected', '#E8F0E7')], foreground=[('selected', c['ink'])])
+        style.layout('Vertical.TScrollbar', [('Vertical.Scrollbar.trough', {'sticky': 'ns', 'children': [
+            ('Vertical.Scrollbar.thumb', {'expand': '1', 'sticky': 'nswe'})]})])
+        style.configure('Vertical.TScrollbar', arrowsize=8, width=8, background='#D4DDD3', troughcolor=c['paper'],
+                        borderwidth=0, bordercolor=c['paper'], lightcolor='#D4DDD3', darkcolor='#D4DDD3', relief='flat')
+        style.configure('TSeparator', background=c['line'], bordercolor=c['line'], lightcolor=c['line'], darkcolor=c['line'])
+        style.configure('Horizontal.TProgressbar', background=c['accent'], troughcolor='#E3E9E1',
+                        borderwidth=0, bordercolor='#E3E9E1', thickness=5, lightcolor=c['accent'], darkcolor=c['accent'])
+        frame = ttk.Frame(root, padding=(24, 16), style='Shell.TFrame')
         frame.pack(fill='both', expand=True)
-        ttk.Label(frame, text='带上项目，继续对话。', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(frame, text='选择内容 → 检查迁移结果 → 在新平台继续工作', style='Sub.TLabel').pack(anchor='w', pady=(5, 15))
+        header = ttk.Frame(frame, style='Shell.TFrame')
+        header.pack(fill='x', pady=(0, 12))
+        ttk.Label(header, text='AgentCarry', style='Brand.TLabel').pack(side='left')
+        ttk.Label(header, text='同一份项目，继续下一段对话', style='Shell.TLabel').pack(side='left', padx=18)
+        ttk.Label(header, text='LOCAL  /  本机迁移', style='Shell.TLabel').pack(side='right')
         self.tabs = ttk.Notebook(frame)
         self.tabs.pack(fill='both', expand=True)
-        self.pages = [ttk.Frame(self.tabs, padding=16) for _ in range(3)]
-        for page, name in zip(self.pages, ('1  选择内容', '2  迁移位置', '3  检查并执行')):
+        self.pages = [ttk.Frame(self.tabs, padding=(24, 18)) for _ in range(3)]
+        for page, name in zip(self.pages, ('01  选择对话', '02  迁移设置', '03  检查与导入')):
             self.tabs.add(page, text=name)
         settings = service.defaults()
         self.vars = {k: tk.StringVar(root, value=v) for k, v in settings.items()}
         self.mode = tk.StringVar(root, value=next(iter(MODES)))
         self.include_internal, self.include_archived = tk.BooleanVar(root), tk.BooleanVar(root)
         self.lossy, self.activate = tk.BooleanVar(root), tk.BooleanVar(root)
-        self.source_note = tk.StringVar(root, value='点击“读取项目”，只读取聊天目录元数据。勾选后才会导出对应内容。')
+        self.source_note = tk.StringVar(root, value='读取本机项目后，选择要继续的对话。')
+        self.selection_note = tk.StringVar(root, value='尚未选择')
         self.context_note = tk.StringVar(root, value='未选择额外记忆/规则文件；原项目规则保留在原目录。')
         self.status = tk.StringVar(root, value='就绪 · ' + service.VERSION)
         self._source_page()
         self._target_page()
         self._review_page()
-        footer = ttk.Frame(frame)
+        footer = ttk.Frame(frame, style='Shell.TFrame', padding=(4, 4, 4, 0))
         footer.pack(side='bottom', fill='x', pady=(10, 0), before=self.tabs)
-        self.progress_note = tk.StringVar(root, value='等待操作')
+        self.progress_note = tk.StringVar(root, value='所有迁移操作均在本机完成')
         self.elapsed = tk.StringVar(root, value='')
-        ttk.Label(footer, textvariable=self.progress_note, wraplength=850).pack(anchor='w')
-        ttk.Label(footer, textvariable=self.elapsed, style='Sub.TLabel').pack(anchor='w')
-        self.status_label = ttk.Label(footer, textvariable=self.status, wraplength=550)
+        top = ttk.Frame(footer, style='Shell.TFrame')
+        top.pack(fill='x')
+        ttk.Label(top, textvariable=self.elapsed, style='Shell.TLabel').pack(side='right')
+        self.status_label = ttk.Label(top, textvariable=self.status, wraplength=650, style='Shell.TLabel')
         self.status_label.pack(side='left', fill='x', expand=True)
-        self.progress = ttk.Progressbar(footer, mode='indeterminate', length=150)
-        self.progress.pack(side='right', padx=(10, 0), before=self.status_label)
-        footer.bind('<Configure>', lambda e: self.status_label.configure(wraplength=max(200, e.width - 190)))
+        progress_track = ttk.Frame(footer, height=5, style='Shell.TFrame')
+        progress_track.pack(fill='x', pady=(7, 6))
+        progress_track.pack_propagate(False)
+        self.progress = ttk.Progressbar(progress_track, mode='determinate', length=150)
+        self.progress.pack(fill='both', expand=True)
+        self.detail_label = ttk.Label(footer, textvariable=self.progress_note, wraplength=850, style='Shell.TLabel')
+        self.detail_label.pack(anchor='w')
+        footer.bind('<Configure>', lambda e: (self.status_label.configure(wraplength=max(200, e.width - 110)),
+                                              self.detail_label.configure(wraplength=max(200, e.width - 8))))
         for var in [*self.vars.values(), self.mode, self.lossy, self.activate]:
             var.trace_add('write', lambda *_: self.invalidate())
         self.root.after(100, self.poll)
 
-    def button(self, parent, text, command):
-        widget = ttk.Button(parent, text=text, command=command)
+    def button(self, parent, text, command, style='TButton'):
+        widget = ttk.Button(parent, text=text, command=command, style=style)
         self.controls.append(widget)
         return widget
 
@@ -93,119 +149,158 @@ class Window:
         box.pack(anchor='w', pady=6)
         self.controls.append(box)
 
+    def page_title(self, parent, title, subtitle):
+        ttk.Label(parent, text=title, style='Title.TLabel').pack(anchor='w')
+        ttk.Label(parent, text=subtitle, style='Sub.TLabel', wraplength=720).pack(anchor='w', pady=(6, 12))
+
+    def disclosure(self, parent, title):
+        holder = ttk.Frame(parent)
+        holder.pack(fill='x', pady=(3, 8))
+        body = ttk.Frame(holder, padding=(0, 6, 0, 4))
+        opened = [False]
+        def toggle():
+            opened[0] = not opened[0]
+            button.configure(text=('−  ' if opened[0] else '+  ') + title)
+            if opened[0]:
+                body.pack(fill='x')
+            else:
+                body.pack_forget()
+        button = self.button(holder, '+  ' + title, toggle, 'Quiet.TButton')
+        button.pack(anchor='w')
+        return body
+
+    def menu_button(self, parent, label):
+        widget = ttk.Menubutton(parent, text=label)
+        menu = tk.Menu(widget, tearoff=False, background=self.colors['paper'], foreground=self.colors['ink'],
+                       activebackground=self.colors['wash'], activeforeground=self.colors['ink'],
+                       font=('Microsoft YaHei UI', 10), borderwidth=0)
+        widget.configure(menu=menu)
+        self.controls.append(widget)
+        return widget, menu
+
     def _source_page(self):
-        outer = self.pages[0]
-        bottom = ttk.Frame(outer)
+        page = self.pages[0]
+        bottom = ttk.Frame(page, padding=(0, 14, 0, 0))
         bottom.pack(side='bottom', fill='x')
-        ttk.Label(bottom, textvariable=self.context_note, wraplength=700).pack(anchor='w', pady=(5, 4))
+        ttk.Separator(bottom).pack(fill='x', pady=(0, 12))
         row = ttk.Frame(bottom)
         row.pack(fill='x')
-        self.button(row, '添加记忆/规则文件…', self.pick_context).pack(side='left')
-        self.button(row, '清除额外文件', self.clear_context).pack(side='left', padx=6)
-        self.next_button = self.button(row, '下一步 →', lambda: self.tabs.select(1))
+        self.next_button = self.button(row, '下一步 →', lambda: self.tabs.select(1), 'Accent.TButton')
         self.next_button.pack(side='right')
-        canvas = tk.Canvas(outer, highlightthickness=0)
-        scroll_page = ttk.Scrollbar(outer, orient='vertical', command=canvas.yview)
-        canvas.configure(yscrollcommand=scroll_page.set)
-        scroll_page.pack(side='right', fill='y')
-        canvas.pack(fill='both', expand=True)
-        page = ttk.Frame(canvas)
-        window = canvas.create_window(0, 0, window=page, anchor='nw')
-        page.bind('<Configure>', lambda _: canvas.configure(scrollregion=canvas.bbox('all')))
-        canvas.bind('<Configure>', lambda e: canvas.itemconfigure(window, width=e.width))
-        self.field(page, 'Codex 数据目录', self.vars['codex_home'])
+        self.button(row, '添加记忆 / 规则', self.pick_context, 'Quiet.TButton').pack(side='left')
+        self.button(row, '清除', self.clear_context, 'Quiet.TButton').pack(side='left', padx=6)
+        ttk.Label(bottom, textvariable=self.context_note, style='Sub.TLabel', wraplength=700).pack(anchor='w', pady=(6, 0))
+        self.page_title(page, '选择要带走的对话', '项目留在原目录。选择对话，带着已有的上下文继续工作。')
         actions = ttk.Frame(page)
-        actions.pack(fill='x', pady=8)
-        for text, callback in [('读取项目', self.scan), ('添加项目目录…', self.add_project),
-                               ('全选', lambda: self.choose_all(True)), ('取消全选', lambda: self.choose_all(False)),
-                               ('打开本机迁移记录…', self.open_job)]:
-            self.button(actions, text, callback).pack(side='left', padx=(0, 6))
-        detail_actions = ttk.Frame(page)
-        detail_actions.pack(fill='x', pady=(0, 5))
-        self.button(detail_actions, '展开全部会话', lambda: self.expand_projects(True)).pack(side='left')
-        self.button(detail_actions, '收起全部项目', lambda: self.expand_projects(False)).pack(side='left', padx=6)
-        self.button(detail_actions, '仅关联项目（不选会话）', self.choose_files_only).pack(side='left')
-        ttk.Label(page, text='展开项目后逐条勾选会话；取消所有会话仍可关联原项目目录。', style='Sub.TLabel').pack(anchor='w')
-        ttk.Label(page, textvariable=self.source_note, wraplength=850, style='Sub.TLabel').pack(anchor='w', pady=(0, 8))
-        filters = ttk.Frame(page)
-        filters.pack(fill='x', pady=(0, 5))
-        for text, var in [('显示归档对话', self.include_archived), ('显示内部/自动任务（高级）', self.include_internal)]:
-            box = ttk.Checkbutton(filters, text=text, variable=var, command=self.scan)
-            box.pack(side='left', padx=(0, 10))
-            self.controls.append(box)
-        ttk.Label(page, text='默认仅列普通对话；更改筛选会重新读取并清空勾选。', style='Sub.TLabel').pack(anchor='w')
+        actions.pack(fill='x', pady=(0, 8))
+        self.button(actions, '读取项目', self.scan, 'Accent.TButton').pack(side='left')
+        self.button(actions, '添加项目', self.add_project).pack(side='left', padx=8)
+        more, menu = self.menu_button(actions, '更多  ⋯')
+        more.pack(side='left')
+        for label, command in [('全选可用会话', lambda: self.choose_all(True)), ('取消全选', lambda: self.choose_all(False)),
+                               ('仅关联项目，不选会话', self.choose_files_only), ('展开全部', lambda: self.expand_projects(True)),
+                               ('收起全部', lambda: self.expand_projects(False))]:
+            menu.add_command(label=label, command=command)
+        menu.add_separator()
+        menu.add_checkbutton(label='显示归档对话（重读并清空勾选）', variable=self.include_archived, command=self.scan)
+        menu.add_checkbutton(label='显示内部 / 自动任务（重读并清空勾选）', variable=self.include_internal, command=self.scan)
+        menu.add_separator()
+        menu.add_command(label='设置 Codex 数据目录…', command=lambda: self.pick_dir(self.vars['codex_home']))
+        menu.add_command(label='打开本机迁移记录…', command=self.open_job)
+        ttk.Label(actions, textvariable=self.selection_note, style='Sub.TLabel').pack(side='right')
+        ttk.Label(page, textvariable=self.source_note, style='Sub.TLabel', wraplength=740).pack(anchor='w', pady=(0, 10))
         area = ttk.Frame(page)
         area.pack(fill='both', expand=True)
-        self.tree = ttk.Treeview(area, columns=('detail',), selectmode='browse', height=10)
-        self.tree.heading('#0', text='点击勾选项目或会话')
-        self.tree.heading('detail', text='路径 / 会话 ID')
-        self.tree.column('#0', width=370, minwidth=240)
-        self.tree.column('detail', width=420, minwidth=200)
+        self.tree = ttk.Treeview(area, columns=('detail',), selectmode='browse', height=5)
+        self.tree.heading('#0', text='项目与对话  ·  点击勾选')
+        self.tree.heading('detail', text='位置 / 状态')
+        self.tree.column('#0', width=500, minwidth=260)
+        self.tree.column('detail', width=260, minwidth=120)
+        self.tree.tag_configure('project', background='#F2F6F0', foreground=self.colors['accent'], font=('Microsoft YaHei UI', 10, 'bold'))
+        self.tree.tag_configure('unavailable', foreground='#A28B76')
         scroll = ttk.Scrollbar(area, orient='vertical', command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.pack(side='left', fill='both', expand=True)
         scroll.pack(side='right', fill='y')
+        self.tree.pack(side='left', fill='both', expand=True)
         self.tree.bind('<ButtonRelease-1>', self.toggle)
         self.tree.bind('<space>', self.toggle)
 
     def _target_page(self):
         outer = self.pages[1]
-        canvas = tk.Canvas(outer, highlightthickness=0, height=400)
+        row = ttk.Frame(outer, padding=(0, 12, 0, 0))
+        row.pack(side='bottom', fill='x')
+        ttk.Separator(row).pack(fill='x', pady=(0, 12))
+        actions = ttk.Frame(row)
+        actions.pack(fill='x')
+        self.button(actions, '← 返回', lambda: self.tabs.select(0), 'Quiet.TButton').pack(side='left')
+        self.button(actions, '准备并检查迁移 →', self.prepare, 'Accent.TButton').pack(side='right')
+        canvas = tk.Canvas(outer, highlightthickness=0, background=self.colors['paper'])
         scroll = ttk.Scrollbar(outer, orient='vertical', command=canvas.yview)
         canvas.configure(yscrollcommand=scroll.set)
-        canvas.pack(side='left', fill='both', expand=True)
         scroll.pack(side='right', fill='y')
+        canvas.pack(fill='both', expand=True)
         page = ttk.Frame(canvas)
         window = canvas.create_window(0, 0, window=page, anchor='nw')
         page.bind('<Configure>', lambda _: canvas.configure(scrollregion=canvas.bbox('all')))
         canvas.bind('<Configure>', lambda e: canvas.itemconfigure(window, width=e.width))
         self.root.bind_all('<MouseWheel>', lambda e: canvas.yview_scroll(-int(e.delta / 120), 'units')
                            if self.tabs.select() == str(outer) else None, add='+')
-        ttk.Label(page, text='选择迁移方式').pack(anchor='w')
+        self.page_title(page, '让对话在新平台继续', '确认迁移方式和资料位置，然后生成检查报告。')
+        ttk.Label(page, text='迁移方式', style='Section.TLabel').pack(anchor='w')
         combo = ttk.Combobox(page, textvariable=self.mode, values=list(MODES), state='readonly', width=46)
-        combo.pack(anchor='w', pady=(5, 10))
+        combo.pack(fill='x', pady=(8, 8), padx=(0, 10))
         self.controls.append(combo)
-        ttk.Label(page, text='原生导入目前支持 Windows Antigravity App 2.32.2。请在准备前完全退出目标客户端。',
-                  wraplength=820, style='Sub.TLabel').pack(anchor='w', pady=(0, 12))
-        self.field(page, '迁移资料目录', self.vars['output'])
-        ttk.Label(page, text='仅同机迁移：项目直接使用原目录。archives 保存聊天档案，runs 保存报告与备份；不要选择源项目内部。',
-                  wraplength=820, style='Sub.TLabel').pack(anchor='w', pady=(0, 10))
-        paths = ttk.LabelFrame(page, text='目标路径（默认使用当前账户，可修改）', padding=10)
-        paths.pack(fill='x', pady=8)
-        self.field(paths, '用户根目录', self.vars['home'])
-        self.field(paths, 'App UI 数据目录', self.vars['ui'])
-        self.field(paths, 'Antigravity 安装目录', self.vars['app_root'])
-        self.check(page, '接受报告列出的转换差异：工具调用、图片等仅保留在档案中', self.lossy)
-        ttk.Label(page, text='规则/记忆：原文件保留；额外选择的文件仅单独存档，不自动写入项目。', wraplength=820, style='Sub.TLabel').pack(anchor='w', pady=6)
-        ttk.Label(page, text='原始标题会存档，但客户端可能显示首条消息。原生工具记录与媒体重建尚未支持。',
-                  wraplength=820, style='Sub.TLabel').pack(anchor='w', pady=(5, 10))
-        row = ttk.Frame(outer)
-        row.pack(side='bottom', fill='x', pady=10, before=canvas)
-        self.button(row, '← 返回选择', lambda: self.tabs.select(0)).pack(side='left')
-        self.button(row, '整理数据库…', self.checkpoint).pack(side='left', padx=8)
-        self.button(row, '准备并检查迁移 →', self.prepare).pack(side='right')
+        ttk.Label(page, text='原生导入支持 Windows Antigravity 2.32.2。准备前请保存工作并退出客户端。',
+                  wraplength=700, style='Sub.TLabel').pack(anchor='w', pady=(0, 20))
+        ttk.Label(page, text='迁移资料', style='Section.TLabel').pack(anchor='w', pady=(0, 5))
+        self.field(page, '资料保存位置', self.vars['output'])
+        ttk.Label(page, text='这里保存聊天档案、报告和备份。代码与项目文件继续使用原目录。',
+                  wraplength=700, style='Sub.TLabel').pack(anchor='w', pady=(5, 14))
+        paths = self.disclosure(page, '高级路径与维护')
+        for key, label in [('home', '用户根目录'), ('ui', 'App UI 数据目录'), ('app_root', 'Antigravity 安装目录')]:
+            self.field(paths, label, self.vars[key])
+        self.button(paths, '整理已关闭的数据库…', self.checkpoint, 'Quiet.TButton').pack(anchor='w', pady=5)
+        ttk.Separator(page).pack(fill='x', pady=(8, 14))
+        self.check(page, '接受报告列出的转换差异', self.lossy)
+        ttk.Label(page, text='工具调用、图片等仅保留在历史档案中；请先阅读报告，再决定是否接受。',
+                  wraplength=700, style='Sub.TLabel').pack(anchor='w', pady=(0, 12))
+        ttk.Label(page, text='原规则保持原样；额外记忆 / 规则单独存档。客户端可能以首条消息显示会话名称。',
+                  wraplength=700, style='Sub.TLabel').pack(anchor='w', pady=(0, 10))
 
     def _review_page(self):
         page = self.pages[2]
-        tools = ttk.Frame(page)
-        tools.pack(fill='x', pady=(0, 8))
-        for label, action in [('退出 Antigravity（含后台）', 'close'), ('打开 Antigravity', 'open'), ('重启 Antigravity', 'restart')]:
-            self.button(tools, label, lambda a=action: self.manage_app(a)).pack(side='left', padx=(0, 6))
-        self.report = ScrolledText(page, wrap='word', font=('Microsoft YaHei UI', 10), relief='flat', padx=12, pady=12)
-        self.report.pack(fill='both', expand=True)
-        self.show_report('准备完成后，这里会显示项目、会话、恢复位置和转换差异。\n\n原生导入只会在你点击“执行导入”后写入目标 App。')
-        row = ttk.Frame(page)
-        row.pack(side='bottom', fill='x', pady=(12, 0), before=self.report)
-        self.button(row, '查看输出目录', self.open_output).pack(side='left')
-        self.button(row, '恢复一次导入…', self.recover).pack(side='left', padx=8)
-        self.apply_button = self.button(row, '执行导入', self.apply)
+        row = ttk.Frame(page, padding=(0, 14, 0, 0))
+        row.pack(side='bottom', fill='x')
+        ttk.Separator(row).pack(fill='x', pady=(0, 12))
+        actions = ttk.Frame(row)
+        actions.pack(fill='x')
+        self.button(actions, '查看资料目录', self.open_output, 'Quiet.TButton').pack(side='left')
+        self.button(actions, '恢复一次导入…', self.recover, 'Quiet.TButton').pack(side='left', padx=8)
+        self.apply_button = self.button(actions, '执行导入', self.apply, 'Accent.TButton')
         self.apply_button.pack(side='right')
         self.apply_button.state(['disabled'])
+        self.page_title(page, '确认后，继续对话', '检查项目目录和转换差异。执行导入后，再打开 Antigravity 验证。')
+        tools = ttk.Frame(page)
+        tools.pack(fill='x', pady=(0, 14))
+        self.button(tools, '退出 Antigravity', lambda: self.manage_app('close')).pack(side='left')
+        self.button(tools, '打开 Antigravity', lambda: self.manage_app('open')).pack(side='left', padx=8)
+        self.button(tools, '重启', lambda: self.manage_app('restart'), 'Quiet.TButton').pack(side='left')
+        self.report = ScrolledText(page, wrap='word', font=('Microsoft YaHei UI', 10), relief='flat',
+                                  background='#F8FAF6', foreground=self.colors['ink'], insertbackground=self.colors['accent'],
+                                  selectbackground='#DEEADC', borderwidth=0, padx=20, pady=18, spacing1=3, spacing3=6)
+        self.report.pack(fill='both', expand=True)
+        self.report.tag_configure('heading', font=('Microsoft YaHei UI', 13, 'bold'), foreground=self.colors['accent'], spacing3=12)
+        self.report.tag_configure('status', font=('Microsoft YaHei UI', 10, 'bold'))
+        self.show_report('还没有生成迁移报告\n\n选择对话并完成设置后，点击“准备并检查迁移”。\n这里会显示项目目录、会话数量和转换差异。')
 
     def show_report(self, text):
         self.report.configure(state='normal')
         self.report.delete('1.0', 'end')
         self.report.insert('end', text)
+        self.report.tag_add('heading', '1.0', '1.end')
+        for number, line in enumerate(text.splitlines(), 1):
+            if line.startswith(('状态：', '需处理：')):
+                self.report.tag_add('status', f'{number}.0', f'{number}.end')
         self.report.configure(state='disabled')
 
     def invalidate(self):
@@ -231,7 +326,7 @@ class Window:
             self.invalidate()
             self.draw_projects()
             missing = sum(not t.get('available', True) for p in projects for t in p['threads'])
-            self.source_note.set(f'聊天文件缺失 {missing} 条，已标记且不可勾选；全选仅选择可用会话。当前筛选显示 {len(projects)} 个项目、{sum(len(p["threads"]) for p in projects)} 条会话。请勾选要迁移的内容。')
+            self.source_note.set(f'{len(projects)} 个项目 · {sum(len(p["threads"]) for p in projects)} 条对话' + (f' · {missing} 条记录缺失，已单独标注' if missing else ' · 展开项目，可逐条选择'))
         self.start(lambda: service.source_projects(home, include_internal, include_archived), done)
         self.show_progress({'stage': '读取项目与会话索引', 'detail': '检查会话类型及普通/压缩记录路径，不读取聊天正文'})
 
@@ -240,19 +335,20 @@ class Window:
                   for n in self.tree.get_children() if n in self.nodes and self.nodes[n][0] == 'project'}
         self.tree.delete(*self.tree.get_children())
         self.nodes.clear()
+        self.selection_note.set(f'已选 {len(self.selected_roots)} 个项目 · {len(self.selected_threads)} 条对话')
         for i, project in enumerate(self.projects):
             node = f'p{i}'
             chosen = project['path'] in self.selected_roots
             count = sum(t['id'] in self.selected_threads for t in project['threads'])
             available = sum(t.get('available', True) for t in project['threads'])
-            label = ('☑ ' if chosen else '☐ ') + project['name'] + f'（已选 {count}/{available} 条可用会话；缺失 {len(project["threads"]) - available} 条）' + ('' if project['available'] else '（目录不存在）')
-            self.tree.insert('', 'end', iid=node, text=label, values=(project['path'],), open=opened.get(project['path'], True))
+            label = ('☑ ' if chosen else '☐ ') + project['name'] + f'   ·   {count} / {available} 已选' + (f' · {len(project["threads"]) - available} 缺失' if available != len(project['threads']) else '') + ('' if project['available'] else '（目录不存在）')
+            self.tree.insert('', 'end', iid=node, text=label, values=(project['path'],), open=opened.get(project['path'], True), tags=('project',))
             self.nodes[node] = ('project', project)
             for j, chat in enumerate(project['threads']):
                 child = f'{node}-c{j}'
                 kind = {'guardian': '【内部审查】', 'subagent': '【子代理】', 'automation': '【自动任务】'}.get(chat.get('task_kind'), '')
-                label = ('☑ ' if chat['id'] in self.selected_threads else '☐ ') + kind + chat['title'] + ('（已归档）' if chat.get('archived') else '') + ('（压缩记录）' if chat.get('compressed') else '') + ('' if chat.get('available', True) else '（聊天文件缺失）')
-                self.tree.insert(node, 'end', iid=child, text=label, values=(chat['id'] if chat.get('available', True) else chat.get('rollout_path', '文件缺失'),))
+                label = ('☑ ' if chat['id'] in self.selected_threads else '☐ ') + kind + chat['title'] + ('（已归档）' if chat.get('archived') else '') + ('' if chat.get('available', True) else '（聊天文件缺失）')
+                self.tree.insert(node, 'end', iid=child, text=label, values=(('已归档 · ' if chat.get('archived') else '') + ('压缩记录' if chat.get('compressed') else '聊天记录') if chat.get('available', True) else chat.get('rollout_path', '文件缺失'),), tags=() if chat.get('available', True) else ('unavailable',))
                 self.nodes[child] = ('chat', (project, chat))
 
     def toggle(self, event):
@@ -344,7 +440,7 @@ class Window:
         files = filedialog.askopenfilenames(parent=self.root, title='选择需要单独存档的额外文本记忆/规则',
                                             filetypes=[('UTF-8 文本', '*.md *.txt')])
         self.contexts = list(dict.fromkeys([*self.contexts, *files]))
-        self.context_note.set(f'已选择 {len(self.contexts)} 份额外文件，将单独存档，不自动改写项目。')
+        self.context_note.set(f'已添加 {len(self.contexts)} 份记忆 / 规则文件 · 单独存档')
         self.invalidate()
 
     def clear_context(self):
